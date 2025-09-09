@@ -22,7 +22,10 @@ This project tests whether the **low volatility anomaly** in stock returns has i
 ## 📊 Data & Methodology
 
 ### Data Sources
-- **Historical S&P 500 constituents**: `sp_500_historical_components.csv` (29 years of daily data)
+- **Historical S&P 500 constituents**: Data sourced from [hanshof/sp500_constituents](https://github.com/hanshof/sp500_constituents) (MIT License)
+  - File: `sp_500_historical_components.csv` (29 years of daily data)
+  - Provides point-in-time S&P 500 membership from 1996-2025
+  - 1,128 unique tickers tracked over time
 - **Price data**: YFinance.jl for actual historical prices
 - **Factor models**: CAPM and Fama-French models for benchmarking
 
@@ -126,6 +129,10 @@ This is an active research project. Contributions welcome for:
 - Baker, M., Bradley, B., & Wurgler, J. (2011). Benchmarks as limits to arbitrage
 - Novy-Marx, R. (2013). The other side of value: The gross profitability premium  
 - Ang, A., Hodrick, R. J., Xing, Y., & Zhang, X. (2006). The cross‐section of volatility and expected returns
+
+## 🙏 Acknowledgments & Data Attribution
+
+- **Historical S&P 500 Data**: Special thanks to [hanshof/sp500_constituents](https://github.com/hanshof/sp500_constituents) for providing comprehensive historical S&P 500 constituent data under MIT License. This dataset is crucial for our survivorship bias correction methodology.
 
 ## 📄 License
 
