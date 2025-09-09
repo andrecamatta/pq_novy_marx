@@ -1,128 +1,127 @@
-# 🎯 Testing the Low Volatility Anomaly with Survivorship Bias Correction
+# 🎯 Testando a Anomalia de Baixa Volatilidade com Correção de Viés de Sobrevivência
 
-## Overview
+## Visão Geral
 
-This project tests whether the **low volatility anomaly** in stock returns has independent alpha after controlling for known factors, specifically examining **Novy-Marx's critique** that many financial anomalies disappear under rigorous methodology.
+Este projeto testa se a **anomalia de baixa volatilidade** em retornos de ações possui alfa independente após controlar por fatores conhecidos, examinando especificamente a **crítica de Novy-Marx** de que muitas anomalias financeiras desaparecem sob metodologia rigorosa.
 
-### Key Innovation: Complete Survivorship Bias Elimination
+### Inovação Principal: Eliminação Completa do Viés de Sobrevivência
 
-- **1,128 unique tickers** from historical S&P 500 constituents (1996-2025)
-- **Point-in-time universe** using real historical membership data
-- **Proper methodology** following academic standards (Baker, Bradley & Wurgler 2011)
+- **1.128 tickers únicos** de constituintes históricos do S&P 500 (1996-2025)
+- **Universo point-in-time** usando dados reais de participação histórica
+- **Metodologia adequada** seguindo padrões acadêmicos (Baker, Bradley & Wurgler 2011)
 
-## 🎓 Academic Context
+## 🎓 Contexto Acadêmico
 
-**Novy-Marx Critique**: Many documented financial anomalies are statistical artifacts that disappear when:
-1. Survivorship bias is properly eliminated
-2. Rigorous statistical testing is applied  
-3. Transaction costs and implementation constraints are considered
+**Crítica de Novy-Marx**: Muitas anomalias financeiras documentadas são artefatos estatísticos que desaparecem quando:
+1. O viés de sobrevivência é adequadamente eliminado
+2. Testes estatísticos rigorosos são aplicados
+3. Custos de transação e restrições de implementação são considerados
 
-**Low Volatility Anomaly**: The empirical finding that low-risk stocks tend to outperform high-risk stocks on a risk-adjusted basis.
+**Anomalia de Baixa Volatilidade**: A descoberta empírica de que ações de baixo risco tendem a superar ações de alto risco em base ajustada ao risco.
 
-## 📊 Data & Methodology
+## 📊 Dados e Metodologia
 
-### Data Sources
-- **Historical S&P 500 constituents**: Data sourced from [hanshof/sp500_constituents](https://github.com/hanshof/sp500_constituents) (MIT License)
-  - File: `sp_500_historical_components.csv` (29 years of daily data)
-  - Provides point-in-time S&P 500 membership from 1996-2025
-  - 1,128 unique tickers tracked over time
-- **Price data**: YFinance.jl for actual historical prices
-- **Factor models**: CAPM and Fama-French models for benchmarking
+### Fontes de Dados
+- **Constituintes históricos do S&P 500**: Dados obtidos de [hanshof/sp500_constituents](https://github.com/hanshof/sp500_constituents) (Licença MIT)
+  - Arquivo: `sp_500_historical_components.csv` (29 anos de dados diários)
+  - Fornece participação point-in-time no S&P 500 de 1996-2025
+  - 1.128 tickers únicos rastreados ao longo do tempo
+- **Dados de preços**: YFinance.jl para preços históricos reais
+- **Modelos de fatores**: CAPM e modelos Fama-French para benchmarking
 
-### Methodology
-1. **Point-in-time universe construction** from historical S&P 500 membership
-2. **252-day rolling volatility** calculation with academic filters
-3. **Monthly portfolio formation** (quintiles) with 1-month lag
-4. **Long-short portfolio returns** (low vol - high vol)
-5. **Statistical testing** via t-tests and GRS tests
+### Metodologia
+1. **Construção de universo point-in-time** a partir da participação histórica no S&P 500
+2. **Volatilidade móvel de 252 dias** com filtros acadêmicos
+3. **Formação mensal de portfólios** (quintis) com lag de 1 mês
+4. **Retornos de portfólio long-short** (baixa vol - alta vol)
+5. **Testes estatísticos** via testes-t e testes GRS
 
-## 🏗️ Project Structure
+## 🏗️ Estrutura do Projeto
 
 ```
 pq_novy_marx/
-├── sp_500_historical_components.csv    # Historical S&P 500 data (1996-2025)
+├── sp_500_historical_components.csv    # Dados históricos do S&P 500 (1996-2025)
 ├── src/
-│   ├── VolatilityAnomalyAnalysis.jl    # Main analysis module
+│   ├── VolatilityAnomalyAnalysis.jl    # Módulo principal de análise
 │   └── utils/
-│       ├── config.jl                   # Analysis parameters
-│       ├── portfolio_analysis.jl       # Core portfolio functions
-│       ├── historical_constituents.jl  # Bias correction utilities
-│       ├── real_sp500_data.jl         # Historical universe builder
-│       └── yfinance_integration.jl     # Real data download
-├── test_*.jl                          # Various analysis scripts
-└── *.csv                              # Generated results
+│       ├── config.jl                   # Parâmetros de análise
+│       ├── portfolio_analysis.jl       # Funções centrais de portfólio
+│       ├── historical_constituents.jl  # Utilitários de correção de viés
+│       ├── real_sp500_data.jl         # Construtor de universo histórico
+│       └── data_download.jl           # Download de dados reais
+├── test_*.jl                          # Scripts de análise diversos
+└── *.csv                              # Resultados gerados
 ```
 
-## 🚀 Quick Start
+## 🚀 Início Rápido
 
-### Prerequisites
+### Pré-requisitos
 ```julia
 using Pkg
 Pkg.add(["DataFrames", "Dates", "Statistics", "Distributions", "YFinance", "CSV"])
 ```
 
-### Basic Usage
+### Uso Básico
 ```julia
 include("src/VolatilityAnomalyAnalysis.jl")
 using .VolatilityAnomalyAnalysis
 
-# Run bias-corrected analysis
+# Executar análise com correção de viés
 results = PortfolioAnalysis.analyze_volatility_anomaly_with_bias_correction(
     Date(2000, 1, 1),
     Date(2024, 12, 31),
-    "Low Volatility Test"
+    "Teste de Baixa Volatilidade"
 )
 
-# View results
-println("Annual return (Low-High Vol): ", results.long_short_returns)
+# Visualizar resultados
+println("Retorno anual (Baixa Vol - Alta Vol): ", results.long_short_returns)
 ```
 
-## 📈 Key Findings (Work in Progress)
+## 📈 Principais Descobertas (Trabalho em Progresso)
 
-### Survivorship Bias Impact
-- **Before correction**: ~500 current S&P 500 companies
-- **After correction**: 1,128 unique historical constituents  
-- **Improvement**: 5.8x more comprehensive universe
+### Impacto do Viés de Sobrevivência
+- **Antes da correção**: ~500 empresas atuais do S&P 500
+- **Após a correção**: 1.128 constituintes históricos únicos
+- **Melhoria**: universo 5,8x mais abrangente
 
-### Timeline Validation
-- ✅ **2000**: Includes Enron (ENRNQ), excludes Google/Meta/Tesla
-- ✅ **2008**: Includes Google, excludes Enron (post-bankruptcy)  
-- ✅ **2020**: Modern tech stack present, historical bankruptcies absent
-- ✅ **2024**: Current S&P 500 configuration
+### Validação da Linha do Tempo
+- ✅ **2000**: Inclui Enron (ENRNQ), exclui Google/Meta/Tesla
+- ✅ **2008**: Inclui Google, exclui Enron (pós-falência)
+- ✅ **2020**: Stack tecnológico moderno presente, falências históricas ausentes
+- ✅ **2024**: Configuração atual do S&P 500
 
-## 🧪 Testing Scripts
+## 🧪 Scripts de Teste
 
-- `test_real_universe.jl` - Validates 1,128-ticker universe integration
-- `test_bias_correction.jl` - Tests survivorship bias correction
-- `real_yfinance_test.jl` - Tests actual data download
-- `quick_bias_test.jl` - Fast analysis with representative sample
+- `test_real_universe.jl` - Valida integração do universo de 1.128 tickers
+- `test_bias_correction.jl` - Testa correção de viés de sobrevivência
+- `test_yfinance.jl` - Testa download de dados reais
 
-## 📚 Expected Results
+## 📚 Resultados Esperados
 
-Based on academic literature post-2000:
-- **High volatility should outperform** low volatility  
-- **Effect should be statistically significant** under proper testing
-- **Confirms Novy-Marx critique** if anomaly disappears under bias correction
+Baseado na literatura acadêmica pós-2000:
+- **Alta volatilidade deve superar** baixa volatilidade
+- **Efeito deve ser estatisticamente significativo** sob testes adequados
+- **Confirma crítica de Novy-Marx** se anomalia desaparecer com correção de viés
 
-## ⚠️ Current Status
+## ⚠️ Status Atual
 
-**🚧 Work in Progress**
+**🚧 Trabalho em Progresso**
 
-- ✅ Survivorship bias correction implemented and validated
-- ✅ Historical universe (1,128 tickers) integrated successfully  
-- ✅ Point-in-time methodology working correctly
-- 🔄 YFinance integration for real data download (in progress)
-- 🔄 Full analysis execution with complete dataset
-- 📋 Final statistical results and interpretation
+- ✅ Correção de viés de sobrevivência implementada e validada
+- ✅ Universo histórico (1.128 tickers) integrado com sucesso
+- ✅ Metodologia point-in-time funcionando corretamente
+- 🔄 Integração YFinance para download de dados reais (em progresso)
+- 🔄 Execução completa da análise com dataset completo
+- 📋 Resultados estatísticos finais e interpretação
 
 ## 🤝 Contributing
 
-This is an active research project. Contributions welcome for:
-- Code optimization and bug fixes
-- Additional bias correction methodologies  
-- Alternative data sources integration
-- Statistical testing improvements
-- Documentation and examples
+Este é um projeto de pesquisa ativo. Contribuições bem-vindas para:
+- Otimização de código e correção de bugs
+- Metodologias adicionais de correção de viés
+- Integração de fontes de dados alternativas
+- Melhorias em testes estatísticos
+- Documentação e exemplos
 
 ## 📖 References
 
@@ -130,36 +129,26 @@ This is an active research project. Contributions welcome for:
 - Novy-Marx, R. (2013). The other side of value: The gross profitability premium  
 - Ang, A., Hodrick, R. J., Xing, Y., & Zhang, X. (2006). The cross‐section of volatility and expected returns
 
-## 🙏 Acknowledgments & Data Attribution
+## 🙏 Agradecimentos e Atribuição de Dados
 
-- **Historical S&P 500 Data**: Special thanks to [hanshof/sp500_constituents](https://github.com/hanshof/sp500_constituents) for providing comprehensive historical S&P 500 constituent data under MIT License. This dataset is crucial for our survivorship bias correction methodology.
+- **Dados Históricos do S&P 500**: Agradecimentos especiais a [hanshof/sp500_constituents](https://github.com/hanshof/sp500_constituents) por fornecer dados abrangentes de constituintes históricos do S&P 500 sob Licença MIT. Este dataset é crucial para nossa metodologia de correção de viés de sobrevivência.
 
-## 📄 License
+## 📄 Licença
 
-MIT License - see LICENSE file for details.
+Licença MIT - veja o arquivo LICENSE para detalhes.
 
-## 📧 Contact
+## 📧 Contato
 
 **André Camatta** - [@andrecamatta](https://github.com/andrecamatta)
 
 ---
 
-*This project aims to contribute to the academic understanding of financial anomalies and the importance of rigorous methodology in empirical finance research.*
+*Este projeto visa contribuir para o entendimento acadêmico de anomalias financeiras e a importância de metodologia rigorosa em pesquisa de finanças empíricas.*
 
-**Testing the Novy-Marx Critique with Academic Standards**
+**Testando a Crítica de Novy-Marx com Padrões Acadêmicos**
 
-A clean, modular implementation for testing whether the low volatility anomaly persists under rigorous academic methodology.
+Uma implementação limpa e modular para testar se a anomalia de baixa volatilidade persiste sob metodologia acadêmica rigorosa.
 
-## 🎯 Project Overview
-
-This project implements a comprehensive test of the **low volatility anomaly** - the empirical observation that low-risk stocks tend to outperform high-risk stocks, contradicting traditional finance theory.
-
-We specifically test **Novy-Marx's critique** that many financial anomalies disappear when subjected to proper academic methodology, including:
-- Point-in-time analysis (survivorship bias correction)
-- Academic filtering standards  
-- Proper statistical testing
-- Multiple time periods
-- Robust error handling
 
 ## 🚀 Quick Start
 
@@ -283,11 +272,11 @@ anomaly does not persist under academic standards, supporting
 Novy-Marx's critique of factor mining in finance literature.
 ```
 
-## 🛠️ Requirements
+## 🛠️ Requisitos
 
-- **Julia** 1.6+ (tested on 1.9+)
-- **Internet connection** (for YFinance API)
-- **Packages** (auto-installed):
+- **Julia** 1.6+ (testado em 1.9+)
+- **Conexão com internet** (para API do YFinance)
+- **Pacotes** (instalados automaticamente):
   - YFinance.jl
   - DataFrames.jl  
   - Dates.jl
@@ -296,57 +285,57 @@ Novy-Marx's critique of factor mining in finance literature.
   - StatsBase.jl
   - Distributions.jl
 
-## 🔧 Troubleshooting
+## 🔧 Solução de Problemas
 
-### Common Issues
+### Problemas Comuns
 
-**YFinance API Timeouts**
+**Timeouts da API YFinance**
 ```bash
-# Check internet connection
-# Some corporate networks block Yahoo Finance
-# Try smaller universe: julia main_analysis.jl test
+# Verifique a conexão com internet
+# Algumas redes corporativas bloqueiam Yahoo Finance
+# Tente universo menor: julia main_analysis.jl test
 ```
 
-**Package Installation Errors**
+**Erros de Instalação de Pacotes**
 ```julia
-# Manual package installation
+# Instalação manual de pacotes
 using Pkg
 Pkg.add(["YFinance", "DataFrames", "CSV", "JSON", "StatsBase"])
 ```
 
-**Insufficient Data**
+**Dados Insuficientes**
 ```
-# Reduce minimum data requirements in config.jl
-# Or use smaller date ranges
+# Reduza os requisitos mínimos de dados em config.jl
+# Ou use períodos menores
 ```
 
-## 📚 Academic References
+## 📚 Referências Acadêmicas
 
 - **Baker, Bradley & Wurgler (2011)** - "Benchmarks as Limits to Arbitrage"
 - **Novy-Marx (2012)** - "Is momentum really momentum?"  
 - **Frazzini & Pedersen (2014)** - "Betting Against Beta"
 
-## 🤝 Contributing
+## 🤝 Contribuindo
 
-1. **Issues**: Report bugs or suggest features
-2. **Pull Requests**: Follow existing code style
-3. **Testing**: Add unit tests for new functionality
-4. **Documentation**: Update docstrings and README
+1. **Issues**: Relate bugs ou sugira funcionalidades
+2. **Pull Requests**: Siga o estilo de código existente
+3. **Testes**: Adicione testes unitários para novas funcionalidades
+4. **Documentação**: Atualize docstrings e README
 
 ## 📄 License
 
 MIT License - see LICENSE file for details.
 
-## 📞 Support
+## 📞 Suporte
 
-For questions or issues:
-- Check `julia main_analysis.jl help`
-- Review troubleshooting section
-- Open GitHub issue with:
-  - Julia version
-  - Error messages  
-  - System details
+Para perguntas ou problemas:
+- Verifique `julia main_analysis.jl help`
+- Revise a seção de solução de problemas
+- Abra uma issue no GitHub com:
+  - Versão do Julia
+  - Mensagens de erro
+  - Detalhes do sistema
 
 ---
 
-**Disclaimer**: This tool is for academic research purposes. Results should be validated independently before making investment decisions.
+**Aviso Legal**: Esta ferramenta é para propósitos de pesquisa acadêmica. Os resultados devem ser validados independentemente antes de tomar decisões de investimento.
