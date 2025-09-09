@@ -8,6 +8,7 @@ include("config.jl")
 using .Config
 
 export download_market_data, download_historical_prices, build_price_dataset
+export get_universe, get_analysis_periods, download_with_retry
 
 """
 Download market data for given tickers and date range with robust error handling.
