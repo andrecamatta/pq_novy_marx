@@ -1,5 +1,5 @@
-# Centralized data download utilities
-# Handles YFinance API with proper error handling and retry logic
+# Unified data download module following DRY principle
+# Single interface for all data download operations
 
 module DataDownload
 
@@ -7,7 +7,7 @@ using YFinance, DataFrames, Dates, Printf
 include("config.jl")
 using .Config
 
-export download_market_data, download_with_retry
+export download_market_data, download_historical_prices, build_price_dataset
 
 """
 Download market data for given tickers and date range with robust error handling.
@@ -30,14 +30,18 @@ data, success_count = download_market_data(["AAPL", "MSFT"], "2020-01-01", "2023
 """
 function download_market_data(
     tickers::Vector{String}, 
-    start_date::String, 
-    end_date::String;
+    start_date::Union{String, Date}, 
+    end_date::Union{String, Date};
     max_retries::Int = 2,
     verbose::Bool = true,
     min_data_days::Int = ACADEMIC_CONFIG[:min_market_days]
 )
+    # Convert dates if needed
+    start_dt = start_date isa String ? Date(start_date) : start_date
+    end_dt = end_date isa String ? Date(end_date) : end_date
+    
     verbose && println("📥 Downloading market data...")
-    verbose && println("   Period: $start_date to $end_date")
+    verbose && println("   Period: $start_dt to $end_dt")
     verbose && println("   Tickers: $(length(tickers))")
     
     price_data = DataFrame()
@@ -167,6 +171,50 @@ function get_analysis_periods()::Vector{Tuple{String, String, String}}
         ("2010-2019", "2010-01-01", "2019-12-31"),
         ("2020-2024", "2020-01-01", "2024-11-30")
     ]
+end
+
+"""
+Download historical prices using unified interface (replaces yfinance_integration.jl).
+"""
+function download_historical_prices(
+    tickers::Vector{String},
+    start_date::Date,
+    end_date::Date;
+    verbose::Bool = true
+)
+    return download_market_data(
+        tickers, 
+        string(start_date), 
+        string(end_date),
+        verbose=verbose
+    )[1]  # Return only the DataFrame, not the count
+end
+
+"""
+Build price dataset for bias-corrected analysis (consolidating functionality).
+"""
+function build_price_dataset(
+    universe::Dict{Date, Vector{String}},
+    start_date::Date = Date(2000, 1, 1),
+    end_date::Date = Date(2024, 12, 31)
+)
+    println("🏗️ Building price dataset for bias-corrected analysis...")
+    
+    # Get all unique tickers from the universe
+    all_tickers = Set{String}()
+    for constituents in values(universe)
+        union!(all_tickers, constituents)
+    end
+    
+    total_tickers = length(all_tickers)
+    println("   Total unique tickers in universe: $total_tickers")
+    
+    # Use complete universe for bias-corrected analysis
+    tickers_to_download = collect(all_tickers)
+    println("   📊 Using full bias-corrected universe: $total_tickers tickers")
+    
+    # Download real price data using unified interface
+    return download_historical_prices(tickers_to_download, start_date, end_date)
 end
 
 end

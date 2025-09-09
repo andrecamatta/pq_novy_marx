@@ -6,12 +6,14 @@ module PortfolioAnalysis
 using DataFrames, Dates, Statistics, Printf, Random
 include("config.jl")
 include("historical_constituents.jl")
-include("yfinance_integration.jl")
+include("data_download.jl")
+include("volatility_calculator.jl")
 using .Config
 using .HistoricalConstituents
-using .YFinanceIntegration
+using .DataDownload
+using .VolatilityCalculator
 
-export calculate_rolling_volatility, form_volatility_portfolios, calculate_portfolio_returns
+export form_volatility_portfolios, calculate_portfolio_returns
 export get_long_short_returns, VolatilityResults, analyze_volatility_anomaly_with_bias_correction
 
 # Struct to hold volatility analysis results
