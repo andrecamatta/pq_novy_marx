@@ -1,0 +1,31 @@
+# Julia
+*.jl.*.cov
+*.jl.cov
+*.jl.mem
+/Manifest.toml
+/docs/build/
+/docs/site/
+
+# Temporary files
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# Output files (optional - you may want to keep some results)
+# *.csv
+# results/
+
+# System files
+.env
+.env.local
+
+# Julia package development
+/dev/
+/packages/
