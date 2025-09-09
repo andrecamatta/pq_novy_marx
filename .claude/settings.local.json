@@ -18,7 +18,8 @@
       "Bash(./tools/bin/gh.exe:*)",
       "Bash(git remote add:*)",
       "Bash(git push:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(tree:*)"
     ],
     "deny": [],
     "ask": []
