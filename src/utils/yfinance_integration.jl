@@ -3,7 +3,7 @@
 
 module YFinanceIntegration
 
-using DataFrames, Dates, Statistics, Random
+using DataFrames, Dates, Statistics
 using YFinance
 
 export download_historical_prices, build_price_dataset
@@ -33,8 +33,23 @@ function download_historical_prices(
                 println("   Progress: $i/$(length(tickers)) ($(round(i/length(tickers)*100, digits=1))%)")
             end
             
-            # Download data from YFinance
-            prices = get_prices(ticker, startdt=start_date, enddt=end_date)
+            # Download data from YFinance with timeout handling
+            prices = try
+                get_prices(ticker, startdt=start_date, enddt=end_date)
+            catch e
+                if contains(string(e), "TimeoutException") || contains(string(e), "ConnectError")
+                    println("      ⏰ $ticker: Network timeout, retrying...")
+                    sleep(2)  # Wait before retry
+                    try
+                        get_prices(ticker, startdt=start_date, enddt=end_date)
+                    catch retry_error
+                        println("      ❌ $ticker: Retry failed - $retry_error")
+                        DataFrame()  # Return empty DataFrame
+                    end
+                else
+                    rethrow(e)
+                end
+            end
             
             if !isempty(prices) && "AdjClose" in names(prices)
                 # Extract adjusted close prices
@@ -88,8 +103,7 @@ Downloads real data for historically accurate universe.
 function build_price_dataset(
     universe::Dict{Date, Vector{String}},
     start_date::Date = Date(2000, 1, 1),
-    end_date::Date = Date(2024, 12, 31);
-    max_tickers::Int = 200  # Limit for computational feasibility
+    end_date::Date = Date(2024, 12, 31)
 )
     println("🏗️ Building REAL price dataset for bias-corrected analysis...")
     
@@ -102,52 +116,9 @@ function build_price_dataset(
     total_tickers = length(all_tickers)
     println("   Total unique tickers in universe: $total_tickers")
     
-    # Sample representative tickers if universe is too large
-    if total_tickers > max_tickers
-        println("   🎯 Sampling $max_tickers representative tickers for computational feasibility...")
-        
-        # Smart sampling strategy:
-        # 1. Always include current S&P 500 (most liquid)
-        # 2. Include major historical bankruptcies (bias correction test)
-        # 3. Random sample from remainder
-        
-        current_sp500 = get_current_major_constituents()
-        historical_events = get_key_historical_tickers() 
-        
-        sampled_tickers = []
-        
-        # Priority 1: Current major constituents
-        for ticker in current_sp500
-            if ticker in all_tickers && length(sampled_tickers) < max_tickers * 0.7
-                push!(sampled_tickers, ticker)
-            end
-        end
-        
-        # Priority 2: Key historical events
-        for ticker in historical_events
-            if ticker in all_tickers && !(ticker in sampled_tickers) && length(sampled_tickers) < max_tickers * 0.8
-                push!(sampled_tickers, ticker)
-            end
-        end
-        
-        # Priority 3: Random sample from remainder
-        remaining_tickers = [t for t in all_tickers if !(t in sampled_tickers)]
-        n_remaining = min(max_tickers - length(sampled_tickers), length(remaining_tickers))
-        
-        if n_remaining > 0
-            Random.seed!(42)  # Reproducible sampling
-            additional_tickers = Random.shuffle(remaining_tickers)[1:n_remaining]
-            append!(sampled_tickers, additional_tickers)
-        end
-        
-        tickers_to_download = sampled_tickers
-        println("   📊 Final sample: $(length(tickers_to_download)) tickers")
-        println("   📋 Includes: $(length([t for t in current_sp500 if t in tickers_to_download])) current major + $(length([t for t in historical_events if t in tickers_to_download])) historical events")
-        
-    else
-        tickers_to_download = collect(all_tickers)
-        println("   📊 Using full universe: $total_tickers tickers")
-    end
+    # Use complete universe for bias-corrected analysis
+    tickers_to_download = collect(all_tickers)
+    println("   📊 Using full bias-corrected universe: $total_tickers tickers")
     
     # Download real price data
     price_data = download_historical_prices(tickers_to_download, start_date, end_date)
@@ -185,38 +156,5 @@ function build_price_dataset(
     return validated_data
 end
 
-"""
-Get current major S&P 500 constituents for priority sampling.
-"""
-function get_current_major_constituents()
-    return [
-        # Mega caps (always liquid and important)
-        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B",
-        "UNH", "JNJ", "JPM", "V", "PG", "HD", "MA", "DIS", "PYPL", "BAC",
-        "ADBE", "CRM", "NFLX", "ABT", "COST", "PFE", "TMO", "AVGO", "CSCO",
-        "ACN", "DHR", "NEE", "VZ", "CMCSA", "PEP", "TXN", "QCOM", "HON",
-        "UNP", "WMT", "LOW", "IBM", "AMGN", "SPGI", "CAT", "GS", "CVX",
-        "AXP", "BA", "MMM", "MCD", "TGT", "SBUX", "GILD", "MDLZ", "BDX"
-    ]
-end
-
-"""
-Get key historical tickers for bias correction validation.
-"""
-function get_key_historical_tickers()
-    return [
-        # Major bankruptcies/delistings that test bias correction
-        "ENRNQ",    # Enron
-        "GM",       # General Motors (bankruptcy)
-        "MER",      # Merrill Lynch
-        "BSC",      # Bear Stearns
-        "WB",       # Wachovia
-        "KM",       # Kmart
-        "YHOO",     # Yahoo (acquired)
-        "AAMRQ",    # AMR (American Airlines bankruptcy)
-        "DALRQ",    # Delta Airlines (bankruptcy)
-        "CCTYQ"     # Circuit City
-    ]
-end
 
 end
