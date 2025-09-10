@@ -6,7 +6,46 @@ module FamaFrenchFactors
 
 using HTTP, CSV, DataFrames, Dates, Statistics, Printf
 
-export download_fama_french_factors, get_ff_factors, summarize_factors
+export download_fama_french_factors, get_ff_factors, get_ff5_factors, summarize_factors, 
+       save_factors_cache, load_factors_cache, factors_cache_exists
+
+"""
+Verifica se existe cache para os fatores.
+"""
+function factors_cache_exists(cache_dir::String = "data/cache/factors")::Bool
+    abs_cache_dir = isabspath(cache_dir) ? cache_dir : joinpath(pwd(), cache_dir)
+    cache_file = joinpath(abs_cache_dir, "ff5_factors.csv")
+    return isfile(cache_file)
+end
+
+"""
+Salva dados de fatores no cache.
+"""
+function save_factors_cache(data::DataFrame, cache_dir::String = "data/cache/factors")::Nothing
+    # Usar caminho absoluto se não for absoluto já
+    abs_cache_dir = isabspath(cache_dir) ? cache_dir : joinpath(pwd(), cache_dir)
+    mkpath(abs_cache_dir)  # Criar diretório se não existir
+    cache_file = joinpath(abs_cache_dir, "ff5_factors.csv")
+    CSV.write(cache_file, data)
+    return nothing
+end
+
+"""
+Carrega dados de fatores do cache.
+"""
+function load_factors_cache(cache_dir::String = "data/cache/factors")::Union{DataFrame, Nothing}
+    abs_cache_dir = isabspath(cache_dir) ? cache_dir : joinpath(pwd(), cache_dir)
+    cache_file = joinpath(abs_cache_dir, "ff5_factors.csv")
+    if isfile(cache_file)
+        try
+            return CSV.read(cache_file, DataFrame)
+        catch e
+            println("⚠️ Erro ao ler cache de fatores: $e")
+            return nothing
+        end
+    end
+    return nothing
+end
 
 """
 Download and parse real Fama-French 5-factor data from Kenneth French Data Library.
@@ -23,11 +62,37 @@ Returns:
 function download_fama_french_factors(
     start_date::Date = Date(2000, 1, 1),
     end_date::Date = Date(2024, 12, 31);
+    force::Bool = false,
     verbose::Bool = true
 )::DataFrame
     
-    verbose && println("📥 Downloading real Fama-French 5-factor data from Kenneth French Data Library...")
+    verbose && println("📥 Obtendo dados reais de fatores Fama-French 5...")
+    verbose && println("   Cache: $(force ? "FORÇAR download" : "usar cache se disponível")")
     
+    # Armazenar diretório original para cache
+    original_dir = pwd()
+    cache_dir = joinpath(original_dir, "data/cache/factors")
+    
+    # Verificar cache primeiro (a menos que force=true)
+    if !force && factors_cache_exists(cache_dir)
+        cached_data = load_factors_cache(cache_dir)
+        if cached_data !== nothing
+            # Verificar se o cache cobre o período solicitado
+            cache_start = minimum(cached_data.Date)
+            cache_end = maximum(cached_data.Date)
+            
+            if cache_start <= start_date && cache_end >= end_date
+                # Filtrar dados do cache para o período solicitado
+                result_data = filter(row -> start_date <= row.Date <= end_date, cached_data)
+                verbose && println("   📁 Usando dados do cache ($(nrow(result_data)) observações)")
+                return result_data
+            else
+                verbose && println("   ⚠️ Cache existe mas não cobre período completo, baixando dados atualizados...")
+            end
+        end
+    end
+    
+    verbose && println("   🌐 Baixando do Kenneth French Data Library...")
     url = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_CSV.zip"
     
     try
@@ -174,6 +239,13 @@ function download_fama_french_factors(
                 println("      Total observations: $(nrow(filtered_factors))")
             end
             
+            # Salvar no cache para uso futuro (salvamos todos os dados, não apenas o filtrado)
+            if nrow(df_factors) > 0
+                cache_dir = joinpath(original_dir, "data/cache/factors")
+                save_factors_cache(df_factors, cache_dir)
+                verbose && println("   💾 Dados salvos no cache")
+            end
+            
             # Cleanup temporary files
             rm(temp_zip, force=true)
             rm(temp_clean_csv, force=true)
@@ -191,7 +263,25 @@ Get Fama-French factors for a specific date range.
 Alias for download_real_ff_factors for compatibility.
 """
 function get_ff_factors(start_date::Date, end_date::Date; verbose::Bool = false)::DataFrame
-    return download_fama_french_factors(start_date, end_date, verbose=verbose)
+    return download_fama_french_factors(start_date, end_date, force=false, verbose=verbose)
+end
+
+"""
+Alias conveniente para obter fatores FF5 com opções de cache.
+
+Parâmetros:
+- start_date, end_date: período desejado
+- use_cache::Bool=true: usar cache se disponível
+- force_refresh::Bool=false: forçar redownload ignorando cache
+- verbose::Bool=true: logs
+"""
+function get_ff5_factors(; start_date::Date = Date(2000,1,1),
+                            end_date::Date = Date(2024,12,31),
+                            use_cache::Bool = true,
+                            force_refresh::Bool = false,
+                            verbose::Bool = true)::DataFrame
+    force = force_refresh || !use_cache
+    return download_fama_french_factors(start_date, end_date, force=force, verbose=verbose)
 end
 
 """

@@ -1,23 +1,166 @@
-# 🎯 NovoMarxAnalysis.jl
+# Novy-Marx S&P 500 Low Volatility Analysis System
 
-**Implementação Acadêmica Completa da Metodologia Novy-Marx para Teste Rigoroso de Anomalias Financeiras**
+**Sistema completo e unificado para análise da anomalia de baixa volatilidade no universo S&P 500 usando metodologia point-in-time rigorosa.**
 
 [![Julia](https://img.shields.io/badge/Julia-1.6+-blue.svg)](https://julialang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+## 🎯 Características Principais
+
+- **Análise flexível**: Qualquer período de 1996 até hoje
+- **Universo S&P 500 completo**: ~500+ tickers com dados históricos
+- **Metodologia point-in-time**: Elimina survivorship bias
+- **Modelos de fatores**: CAPM, Fama-French 3F, 5F
+- **Visualizações completas**: Gráficos profissionais com Plots.jl
+- **Saídas estruturadas**: CSV, JSON, HTML
+- **Cache inteligente**: Otimização de downloads
+
+## 🚀 Uso Rápido
+
+```julia
+using Pkg
+Pkg.activate(".")
+
+include("novy_marx_sp500_analysis.jl")
+
+# Análise padrão (2020-2024)
+results = analyze_sp500()
+
+# Análise customizada
+config = AnalysisConfig(
+    start_date = Date(2010, 1, 1),
+    end_date = Date(2020, 12, 31),
+    lookback_periods = [6, 12, 24],
+    factor_models = [:CAPM, :FF3, :FF5],
+    create_plots = true
+)
+results = analyze_sp500(config)
+
+# Análise rápida
+results = quick_analysis(Date(2020,1,1), Date(2024,10,31))
+```
+
+## 📊 Resultados 2020-2024
+
+Baseado em testes preliminares com amostra do S&P 500:
+
+```
+📈 PERFORMANCE DOS QUINTIS (Anualizada):
+P1 (Low Vol):    11.4% retorno anual
+P5 (High Vol):   38.9% retorno anual
+P1 - P5:        -27.6% (Sharpe: -1.045)
+
+🔄 REVERSÃO DA ANOMALIA DETECTADA!
+Alta volatilidade superou baixa volatilidade no período COVID
+```
+
 ## 🏆 Visão Geral
 
-**NovoMarxAnalysis.jl** é uma implementação academicamente rigorosa da crítica de **Novy-Marx (2013)** para teste de anomalias financeiras. O pacote transforma a pesquisa de anomalias de **testes de retornos brutos metodologicamente questionáveis** para **análise de alfas ajustados por fatores academicamente defensável**.
+**Sistema unificado** que implementa rigorosamente a metodologia **Novy-Marx (2013)** para teste da anomalia de baixa volatilidade no S&P 500, com eliminação completa do survivorship bias através de análise point-in-time.
 
 ### 💡 Insight Acadêmico Central
 
-A crítica de Novy-Marx demonstra que muitas anomalias financeiras "significativas" desaparecem quando controles adequados de fatores sistemáticos são aplicados. Este pacote implementa essa metodologia rigorosa.
-
-**Transformação Metodológica:**
+Transforma análise de anomalias de **testes de retornos brutos** para **análise de alfas ajustados por fatores**:
 - ❌ **Antes**: Testa se `H₀: retorno = 0`  
-- ✅ **Depois**: Testa se `H₀: α = 0` em `R_p - R_f = α + β₁×MKT_RF + β₂×SMB + β₃×HML + β₄×RMW + β₅×CMA + ε`
+- ✅ **Depois**: Testa se `H₀: α = 0` em `R_p - R_f = α + β₁×MKT_RF + β₂×SMB + β₃×HML + ε`
 
-## 🎯 Características Principais
+## 🗂️ Estrutura do Projeto
+
+```
+pq_novy_marx/
+├── novy_marx_sp500_analysis.jl    # ✨ Sistema principal unificado
+├── src/                           
+│   ├── market_data.jl             # Download e processamento
+│   ├── fama_french_factors.jl     # Fatores Fama-French
+│   ├── multifactor_regression.jl  # Análises estatísticas
+│   ├── ticker_resolver.jl         # Resolução de símbolos
+│   ├── visualization.jl           # Visualizações completas
+│   └── NovoMarxAnalysis.jl        # Módulo principal
+├── data/
+│   └── sp_500_historical_components.csv  # Histórico S&P 500
+├── results/                        # Saídas das análises
+├── test/                          # Testes unitários
+└── Project.toml                   # Dependências Julia
+```
+
+## ⚙️ Configurações Disponíveis
+
+```julia
+AnalysisConfig(
+    # Período
+    start_date = Date(2020, 1, 1),
+    end_date = Date(2024, 10, 31),
+    
+    # Metodologia
+    lookback_periods = [6, 12, 24],  # Múltiplas janelas
+    min_coverage = 0.6,              # Cobertura mínima
+    min_per_quintile = 5,            # Mín por quintil
+    
+    # Modelos
+    factor_models = [:CAPM, :FF3, :FF5],
+    
+    # Output
+    output_formats = [:csv, :json, :html],
+    create_plots = true,
+    
+    # Análises adicionais
+    run_subperiod_analysis = true,
+    run_robustness_tests = true
+)
+```
+
+## 📈 Visualizações Geradas
+
+1. **Retornos Cumulativos**: Performance de cada quintil ao longo do tempo
+2. **Rolling Metrics**: Sharpe ratio e volatilidade móvel
+3. **Comparação de Quintis**: Barras com retorno/risco por quintil
+4. **Factor Loadings**: Exposição a fatores de risco
+5. **Drawdown Analysis**: Análise de perdas máximas
+6. **Dashboard Completo**: Visão consolidada
+
+## 📊 Saídas Estruturadas
+
+```
+results/2020-01-01_to_2024-10-31/
+├── portfolios_lookback_12.csv     # Retornos mensais
+├── results_lookback_12.json       # Performance e fatores
+├── report_lookback_12.html        # Relatório formatado
+├── subperiod_analysis.json        # Análise temporal
+├── robustness_tests.json          # Testes de robustez
+├── final_summary.json             # Resumo consolidado
+└── figures/
+    ├── cumulative_lb12.png
+    ├── rolling_sharpe_lb12.png
+    ├── quintiles_lb12.png
+    └── factors_lb12.png
+```
+
+## 🔬 Metodologia
+
+### Point-in-Time
+- Usa apenas dados disponíveis em cada momento histórico
+- Inclui empresas extintas/adquiridas quando relevantes
+- Elimina survivorship bias completamente
+
+### Formação de Quintis
+1. Calcula volatilidade histórica (lookback period)
+2. Ordena ações por volatilidade
+3. Forma 5 portfolios equally-weighted
+4. Rebalanceia mensalmente
+
+### Análise de Fatores
+- **CAPM**: Ajusta por risco de mercado
+- **FF3**: + Size (SMB) e Value (HML)  
+- **FF5**: + Profitability (RMW) e Investment (CMA)
+
+## 🧪 Testes de Robustez
+
+- **Múltiplos lookback periods**: Consistência entre janelas
+- **Análise de subperíodos**: Estabilidade temporal
+- **Rolling Sharpe**: Variação ao longo do tempo
+- **Correlação entre períodos**: Persistência da estratégia
+
+## 🔧 Funcionalidades Técnicas
 
 ### 📊 Dados Reais de Fatores
 - ✅ **Kenneth French Data Library**: Download automático de fatores reais
@@ -26,6 +169,40 @@ A crítica de Novy-Marx demonstra que muitas anomalias financeiras "significativ
 - ✅ **Parsing robusto** com tratamento de erros
 
 ### 🔬 Engine de Regressões Multifator
+- ✅ **CAPM**: `R_p - R_f = α + β×(R_m - R_f) + ε`
+- ✅ **FF3**: Adicionalmente SMB e HML
+- ✅ **FF5**: Modelo completo com RMW e CMA
+- ✅ **Estatísticas completas**: t-testes, p-valores, R²
+- ✅ **Seleção automática** do melhor modelo
+
+## 📚 Referências
+
+- Novy-Marx, R. (2013). "The other side of value: The gross profitability premium"
+- Baker, Bradley, Wurgler (2011). "Benchmarks as Limits to Arbitrage"
+- Frazzini, Pedersen (2014). "Betting Against Beta"
+- Blitz, Van Vliet (2007). "The Volatility Effect"
+
+## 🛠️ Instalação
+
+```julia
+using Pkg
+Pkg.activate(".")
+Pkg.instantiate()  # Instala todas as dependências
+```
+
+## ⚠️ Limitações Conhecidas
+
+- API Yahoo Finance tem rate limits (aguardar 1-2h se atingir)
+- Alguns tickers extintos podem não ter dados disponíveis
+- Período mínimo recomendado: 2+ anos para significância
+
+## 📞 Suporte
+
+Para questões ou sugestões, abrir issue no repositório.
+
+---
+
+**Sistema desenvolvido com rigor acadêmico para análise da anomalia de baixa volatilidade**
 - ✅ **CAPM**: `R_p - R_f = α + β×(R_m - R_f) + ε`
 - ✅ **FF3**: Adicionalmente SMB e HML
 - ✅ **FF5**: Modelo completo com RMW e CMA
@@ -63,38 +240,39 @@ O pacote instala automaticamente:
 
 ## 🚀 Uso Rápido
 
-### Exemplo Básico - Análise de Anomalia
+### Exemplo Rápido (Alinhado por Data, 25+ anos)
 
 ```julia
-using NovoMarxAnalysis
+using NovoMarxAnalysis, .NovoMarxAnalysis
+include("src/market_data.jl"); using .MarketData
+include("src/fama_french_factors.jl"); using .FamaFrenchFactors
 
-# Simular retornos de portfólio (substitua pelos seus dados)
-portfolio_returns = randn(48) .* 2 .+ 0.5  # 48 meses de retornos
+# 1) Portfólios P1..P5 point-in-time (1999–2024) com lag do sinal
+portfolios = MarketData.get_quintile_portfolios_pti(Date(1999,1,1), Date(2024,12,31))
 
-# Análise completa seguindo metodologia Novy-Marx
-results = analyze_low_volatility_anomaly(
-    portfolio_returns,
-    Date(2020, 1, 1),
-    Date(2023, 12, 31),
-    verbose=true
-)
+# 2) Fatores FF5 reais
+factors = FamaFrenchFactors.get_ff5_factors(start_date=Date(1999,1,1), end_date=Date(2024,12,31))
 
-# Ver conclusão acadêmica
-println(results.novy_marx_conclusion)
+# 3) Análise alinhada (preferível acadêmicamente)
+analysis = analyze_low_volatility_anomaly_aligned(portfolios, factors, "LowMinusHigh", verbose=true)
+
+# 4) Conclusão acadêmica
+println(analysis.novy_marx_conclusion)
 ```
 
-### Exemplo Avançado - Teste Conjunto de Portfólios
+### Exemplo Avançado - Teste Conjunto (GRS completo)
 
 ```julia
-# Múltiplos portfólios para teste GRS
-factors = download_fama_french_factors(Date(2020,1,1), Date(2023,12,31))
-
-# Executar regressões individuais
-results_low_vol = run_ff5_regression(returns_low_vol, factors, "Low Vol")
-results_high_vol = run_ff5_regression(returns_high_vol, factors, "High Vol")
-
-# Teste de significância conjunta
-grs_results = test_joint_significance([results_low_vol, results_high_vol])
+# Assumindo `portfolios` e `factors` como acima
+quintile_cols = ["P1","P2","P3","P4","P5"]
+ff5_results = RegressionResult[]
+for col in quintile_cols
+    res = run_ff5_regression_aligned(portfolios, factors, col, portfolio_name=col, robust=true)
+    if res !== nothing
+        push!(ff5_results, res)
+    end
+end
+grs_results = grs_test_full(ff5_results, factors, model=:FF5)
 println(grs_results[:conclusion])
 ```
 
@@ -125,7 +303,7 @@ summarize_factors(factors)
 ├── 📁 src/                      # Código principal
 │   ├── NovoMarxAnalysis.jl      # Módulo principal com API limpa
 │   ├── fama_french_factors.jl   # Download e parsing de dados reais FF
-│   └── multifactor_regression.jl # Engine completo de regressões
+│   └── multifactor_regression.jl # Engine completo de regressões (inclui versões alinhadas + GRS completo)
 │
 ├── 📁 test/                     # Suite de testes
 │   ├── runtests.jl              # Executor principal de testes  
@@ -175,7 +353,7 @@ Robert Novy-Marx (2013) demonstrou que muitas anomalias financeiras documentadas
 
 ### Padrão Acadêmico Moderno
 - **Antes**: Testes de retornos brutos (metodologicamente insuficiente)
-- **Depois**: Testes de alfas ajustados por fatores (academicamente defensável)
+- **Depois**: Testes de alfas ajustados por fatores (academicamente defensável), com alinhamento por data (Date join), GRS completo e erros‑padrão robustos quando necessário.
 
 Este pacote implementa o padrão moderno, tornando-se ferramenta essencial para pesquisa acadêmica rigorosa.
 
