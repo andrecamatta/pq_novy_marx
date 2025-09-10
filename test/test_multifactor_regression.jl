@@ -9,8 +9,8 @@ Random.seed!(42)
 
 try
     # Import required modules
-    include("src/utils/fama_french_factors.jl")
-    include("src/utils/multifactor_regression.jl")
+    include("../src/fama_french_factors.jl")
+    include("../src/multifactor_regression.jl")
     using .FamaFrenchFactors
     using .MultifactorRegression
     

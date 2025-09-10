@@ -17,9 +17,13 @@ using .MultifactorRegression
 
 export download_fama_french_factors, get_ff_factors, summarize_factors
 export run_capm_regression, run_ff3_regression, run_ff5_regression
-export analyze_portfolio_alphas, grs_test
+export run_capm_regression_aligned, run_ff3_regression_aligned, run_ff5_regression_aligned
+export analyze_portfolio_alphas, analyze_portfolio_alphas_aligned, grs_test, grs_test_full
 export RegressionResult, AlphaAnalysis
 export summarize_regression_results, summarize_alpha_analysis
+export calculate_sharpe_ratio_corrected
+export analyze_low_volatility_anomaly_aligned
+export calculate_sharpe_ratio_corrected
 
 """
     analyze_low_volatility_anomaly(returns, start_date, end_date; verbose=true)
@@ -81,12 +85,47 @@ function analyze_low_volatility_anomaly(
         "Low Volatility Portfolio",
         "$(start_date) to $(end_date)"
     )
-    
+
+    @warn "For academically rigorous, date-aligned analysis, prefer analyze_low_volatility_anomaly_aligned(...) with Date-joined data."
+
     if verbose
         println("\n📊 RESULTS SUMMARY:")
         summarize_alpha_analysis(analysis)
     end
     
+    return analysis
+end
+
+"""
+    analyze_low_volatility_anomaly_aligned(portfolios_df, factors_df, portfolio_col; verbose=true)
+
+Novy-Marx compliant analysis using Date-aligned data. This version is preferred for
+academic use. It joins by Date, drops missing rows, and runs CAPM/FF3/FF5 with
+correct Sharpe handling.
+"""
+function analyze_low_volatility_anomaly_aligned(
+    portfolios_df::DataFrame,
+    factors_df::DataFrame,
+    portfolio_col::String;
+    verbose::Bool = true
+)::AlphaAnalysis
+    verbose && println("🧪 NOVY-MARX LOW VOL (ALIGNED) ANALYSIS")
+    verbose && println("=" ^ 50)
+
+    if !("Date" in names(portfolios_df)) || !("Date" in names(factors_df))
+        error("Both portfolios_df and factors_df must have a Date column")
+    end
+
+    verbose && println("🔬 Running aligned multifactor regressions...")
+    analysis = analyze_portfolio_alphas_aligned(
+        portfolios_df, factors_df, portfolio_col, portfolio_col
+    )
+
+    if verbose
+        println("\n📊 RESULTS SUMMARY:")
+        summarize_alpha_analysis(analysis)
+    end
+
     return analysis
 end
 

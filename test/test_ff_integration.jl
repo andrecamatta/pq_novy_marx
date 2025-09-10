@@ -7,7 +7,7 @@ println("=" ^ 60)
 try
     # Test 1: Module import
     println("1️⃣ Testing module import...")
-    include("src/utils/fama_french_factors.jl")
+    include("../src/fama_french_factors.jl")
     using .FamaFrenchFactors
     println("   ✅ Module imported successfully")
     
