@@ -29,6 +29,9 @@ results/
 .env
 .env.local
 
+# Claude Code files
+.claude/
+
 # Julia package development
 /dev/
 /packages/
