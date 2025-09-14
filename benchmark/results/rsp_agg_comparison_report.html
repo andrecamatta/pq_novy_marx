@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Análise Benchmark: RSP-AGG vs Portfólio P1</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { color: #2c3e50; }
+        h2 { color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
+        table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: right; }
+        th { background-color: #3498db; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .metric { font-size: 18px; font-weight: bold; color: #2980b9; }
+        .positive { color: #27ae60; }
+        .negative { color: #e74c3c; }
+        .highlight { background-color: #f39c12; color: white; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Análise Benchmark: RSP-AGG vs Portfólio P1</h1>
+
+    <h2>Composição do Portfólio</h2>
+    <p><strong>Portfólio RSP-AGG Otimizado:</strong></p>
+    <ul>
+        <li>RSP (Invesco S&P 500 Equal Weight): <span class="metric">73.5%</span></li>
+        <li>AGG (Vanguard Total Bond Market): <span class="metric">26.5%</span></li>
+    </ul>
+    <p><strong>Restrição:</strong> Mesma volatilidade do Portfólio P1 (Baixa Volatilidade)</p>
+
+    <h2>Comparação de Performance</h2>
+    <table>
+        <tr>
+            <th>Métrica</th>
+            <th>Portfólio P1</th>
+            <th>Portfólio RSP-AGG</th>
+            <th>Diferença</th>
+        </tr>
+    <tr class="">
+        <td><strong>Retorno Anual (%)</strong></td>
+        <td>12.05</td>
+        <td>10.35</td>
+        <td class="negative">-1.7</td>
+    </tr>
+    <tr class="highlight">
+        <td><strong>Volatilidade Anual (%)</strong></td>
+        <td>11.83</td>
+        <td>11.83</td>
+        <td class="positive">0.001</td>
+    </tr>
+    <tr class="">
+        <td><strong>Índice de Sharpe</strong></td>
+        <td>1.02</td>
+        <td>0.88</td>
+        <td class="negative">-0.144</td>
+    </tr>
+    <tr class="">
+        <td><strong>Drawdown Máximo (%)</strong></td>
+        <td>-19.43</td>
+        <td>-19.33</td>
+        <td class="positive">0.103</td>
+    </tr>
+    <tr class="">
+        <td><strong>Índice de Calmar</strong></td>
+        <td>0.62</td>
+        <td>0.54</td>
+        <td class="negative">-0.085</td>
+    </tr>
+    <tr class="">
+        <td><strong>Índice de Sortino</strong></td>
+        <td>1.44</td>
+        <td>1.19</td>
+        <td class="negative">-0.255</td>
+    </tr>
+    </table>
+
+    <h2>Resumo da Análise</h2>
+    <ul>
+<li>❌ Portfólio RSP-AGG teve <strong>menor retorno</strong> (1.7% a menos)</li><li>❌ Portfólio RSP-AGG teve <strong>pior retorno ajustado ao risco</strong> (Sharpe -0.144)</li>        <li>📊 Ambos os portfólios têm a <strong>mesma volatilidade</strong> por definição (≈11,83%)</li>
+    </ul>
+
+    <h2>Metodologia</h2>
+    <p>Esta análise otimizou a alocação de pesos entre RSP e AGG para igualar
+    a volatilidade do portfólio P1 (Baixa Volatilidade) da análise Novy-Marx.</p>
+    <p><strong>Período:</strong> Setembro 2010 - Agosto 2025 (180 meses)</p>
+    <p><strong>Otimização:</strong> Minimizar |volatilidade_portfólio - 11,83%|</p>
+    <p><strong>Fonte de Dados:</strong> Mesmo sistema híbrido usado para análise S&P 500</p>
+    <p><strong>Rebalanceamento:</strong> Mensal (pesos fixos mantidos a cada mês)</p>
+
+    <h2>Conclusão</h2>
+    <p>O portfólio P1 de baixa volatilidade demonstra <strong>adicionar valor real</strong>
+    além da simples exposição a ações e bonds tradicionais, confirmando que a anomalia
+    de baixa volatilidade gera alpha genuíno.</p>
+
+    <p style="margin-top: 30px; color: #7f8c8d; font-size: 12px;">
+    Gerado em: 2025-09-14T12:07:19.318<br>
+    🤖 Gerado com Claude Code
+    </p>
+</body>
+</html>

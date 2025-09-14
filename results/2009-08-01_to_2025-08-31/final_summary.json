@@ -1,0 +1,40 @@
+{
+  "factor_models": [
+    "CAPM"
+  ],
+  "ticker_statistics": {
+    "total_tickers": 774,
+    "success_rate": 98.32,
+    "failed_tickers": [
+      "BDK",
+      "BNI",
+      "CEPH",
+      "EKDKQ",
+      "GENZ",
+      "HFC",
+      "IGT",
+      "MDP",
+      "MEE",
+      "MOLX",
+      "NOVL",
+      "TLAB",
+      "WYE"
+    ],
+    "failed_tickers_count": 13,
+    "successful_tickers": 761
+  },
+  "analysis_period": {
+    "start": "2009-08-01",
+    "end": "2025-08-31"
+  },
+  "results_summary": {
+    "12": {
+      "annual_return": -2.9788444308267032,
+      "sharpe_ratio": -0.16949335577828986,
+      "n_months": 180.0
+    }
+  },
+  "lookback_periods": [
+    12
+  ]
+}

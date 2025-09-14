@@ -3,8 +3,7 @@ Sistema Unificado de Análise Novy-Marx S&P 500
 Análise completa da anomalia de baixa volatilidade com todas as funcionalidades
 """
 
-using Pkg
-Pkg.activate(".")
+# Nota: evitar ativação de ambiente dentro do script para não interferir no usuário
 
 # Importar módulos
 include("src/market_data.jl")
@@ -80,59 +79,117 @@ function download_universe_data(config::AnalysisConfig)
     cache_key = string(hash((universe, config.start_date, config.end_date)))
     cache_file = joinpath(config.cache_dir, "data_$(cache_key).jld2")
     
-    # Verificar cache
+    # Verificar cache e tickers faltantes
+    failed_tickers = String[]
+    price_data = Dict{String, DataFrame}()
+    missing_tickers = String[]
+    
     if config.use_cache && !config.force_redownload && isfile(cache_file)
         println("📂 Carregando do cache: $cache_file")
         try
             data = JLD2.load(cache_file)
-            println("✅ Cache carregado: $(length(data["price_data"])) tickers")
-            return data["price_data"], universe
+            price_data = data["price_data"]
+            println("✅ Cache carregado: $(length(price_data)) tickers")
+            
+            # Verificar tickers faltantes no cache
+            for ticker in universe
+                if haskey(price_data, ticker)
+                    # Tratar entradas vazias no cache como faltantes
+                    try
+                        if nrow(price_data[ticker]) == 0
+                            delete!(price_data, ticker)
+                            push!(missing_tickers, ticker)
+                        end
+                    catch
+                        delete!(price_data, ticker)
+                        push!(missing_tickers, ticker)
+                    end
+                else
+                    push!(missing_tickers, ticker)
+                end
+            end
+            
+            if isempty(missing_tickers)
+                println("✅ Todos os $(length(universe)) tickers encontrados no cache")
+                return price_data, universe, failed_tickers
+            else
+                println("⚠️  Cache incompleto: $(length(missing_tickers)) tickers faltantes")
+                println("🌐 Buscando tickers faltantes via sistema híbrido...")
+            end
         catch e
-            println("⚠️  Erro no cache, fazendo download: $e")
+            println("⚠️  Erro no cache, fazendo download completo: $e")
+            missing_tickers = copy(universe)
         end
+    else
+        missing_tickers = copy(universe)
     end
     
-    # Download com progress bar
-    println("🌐 Iniciando download de $(length(universe)) tickers...")
-    
-    price_data = Dict{String, DataFrame}()
-    failed_tickers = String[]
-    
-    # Progress bar
-    p = Progress(length(universe), desc="Baixando dados: ")
-    
-    # Download em batches
-    for i in 1:config.batch_size:length(universe)
-        batch_end = min(i + config.batch_size - 1, length(universe))
-        batch = universe[i:batch_end]
+    # Download dos tickers faltantes
+    if !isempty(missing_tickers)
+        println("🌐 Iniciando download de $(length(missing_tickers)) tickers faltantes...")
+        
+        # Download usando sistema híbrido Stooq + Tiingo para tickers faltantes
+        println("🔄 Usando sistema híbrido Stooq + Tiingo para máxima taxa de sucesso...")
         
         try
-            batch_data = download_stock_data(
-                batch,
+            # Download em lote usando sistema híbrido apenas para tickers faltantes
+            new_data = download_stock_data_hybrid(
+                missing_tickers,
                 config.start_date,
                 config.end_date,
-                verbose=false
+                verbose=true,
+                use_tiingo=true
             )
-            merge!(price_data, batch_data)
             
-            # Atualizar progress
-            for _ in 1:length(batch)
-                next!(p)
-            end
+            # Combinar dados do cache com novos dados
+            merge!(price_data, new_data)
             
-            # Pausa entre batches
-            if batch_end < length(universe)
-                sleep(1)
+            # Calcular tickers que falharam (faltantes ou vazios)
+            for ticker in universe
+                if !haskey(price_data, ticker)
+                    push!(failed_tickers, ticker)
+                else
+                    try
+                        if nrow(price_data[ticker]) == 0
+                            push!(failed_tickers, ticker)
+                        end
+                    catch
+                        push!(failed_tickers, ticker)
+                    end
+                end
             end
+        
         catch e
-            append!(failed_tickers, batch)
-            for _ in 1:length(batch)
-                next!(p)
+            println("❌ Erro no sistema híbrido: $e")
+            # Fallback para sistema antigo se híbrido falhar - apenas tickers faltantes
+            println("🔄 Usando sistema antigo como fallback para $(length(missing_tickers)) tickers...")
+            
+            p = Progress(length(missing_tickers), desc="Baixando dados (fallback): ")
+            
+            for i in 1:config.batch_size:length(missing_tickers)
+                batch_end = min(i + config.batch_size - 1, length(missing_tickers))
+                batch = missing_tickers[i:batch_end]
+                
+                try
+                    batch_data = download_stock_data(
+                        batch,
+                        config.start_date,
+                        config.end_date,
+                        verbose=false
+                    )
+                    merge!(price_data, batch_data)
+                catch be
+                    append!(failed_tickers, batch)
+                end
+                
+                for _ in 1:length(batch)
+                    next!(p)
+                end
             end
+            
+            finish!(p)
         end
     end
-    
-    finish!(p)
     
     # Estatísticas
     success_rate = length(price_data) / length(universe) * 100
@@ -155,7 +212,7 @@ function download_universe_data(config::AnalysisConfig)
         end
     end
     
-    return price_data, universe
+    return price_data, universe, failed_tickers
 end
 
 """
@@ -163,7 +220,8 @@ Extrai universo S&P 500 para período
 """
 function extract_sp500_universe(start_date::Date, end_date::Date)
     sp500_file = "data/sp_500_historical_components.csv"
-    sp500_data = CSV.read(sp500_file, DataFrame)
+    abs_path = isabspath(sp500_file) ? sp500_file : normpath(joinpath(@__DIR__, sp500_file))
+    sp500_data = CSV.read(abs_path, DataFrame)
     sp500_data.date = Date.(sp500_data.date)
     
     period_data = filter(row -> start_date <= row.date <= end_date, sp500_data)
@@ -172,7 +230,14 @@ function extract_sp500_universe(start_date::Date, end_date::Date)
     for row in eachrow(period_data)
         if !ismissing(row.tickers)
             for ticker in split(row.tickers, ",")
-                push!(all_tickers, strip(ticker))
+                t = strip(String(ticker))
+                # Remover anotações como "(Previously PKI)" e similares
+                t = replace(t, r"\s*\(.*\)$" => "")
+                t = strip(t)
+                if isempty(t)
+                    continue
+                end
+                push!(all_tickers, t)
             end
         end
     end
@@ -202,7 +267,7 @@ function run_complete_analysis(config::AnalysisConfig = AnalysisConfig())
     mkpath(joinpath(output_dir, "figures"))
     
     # 1. Download de dados
-    price_data, universe = download_universe_data(config)
+    price_data, universe, failed_tickers = download_universe_data(config)
     
     if isempty(price_data)
         error("❌ Nenhum dado obtido. Verifique conectividade.")
@@ -213,6 +278,12 @@ function run_complete_analysis(config::AnalysisConfig = AnalysisConfig())
     println("="^40)
     returns_df = calculate_returns(price_data, config.start_date, config.end_date, verbose=false)
     println("✅ Retornos calculados: $(nrow(returns_df)) meses × $(ncol(returns_df)-1) tickers")
+    # Liberar memória pesada de preços assim que possível (uso mensal)
+    try
+        price_data = Dict{String, DataFrame}()
+        GC.gc()
+    catch
+    end
     
     # 3. Análise para cada lookback period
     all_results = Dict{Int, Any}()
@@ -225,7 +296,8 @@ function run_complete_analysis(config::AnalysisConfig = AnalysisConfig())
         portfolios_df = create_volatility_quintile_portfolios_pti(
             returns_df,
             method=:monthly12,
-            price_data=price_data,
+            # Para método mensal, não precisamos de price_data (economia de memória)
+            price_data=nothing,
             lookback=lookback,
             min_coverage=config.min_coverage,
             min_per_quintile=config.min_per_quintile,
@@ -286,7 +358,7 @@ function run_complete_analysis(config::AnalysisConfig = AnalysisConfig())
     # 6. Gerar relatório final
     println("\n📝 GERANDO RELATÓRIO FINAL")
     println("-"^30)
-    generate_final_report(all_results, config, output_dir)
+    generate_final_report(all_results, config, output_dir, failed_tickers, universe)
     
     println("\n✅ ANÁLISE COMPLETA!")
     println("📂 Resultados salvos em: $output_dir")
@@ -316,11 +388,13 @@ function calculate_portfolio_performance(portfolios_df::DataFrame)
             # Métricas adicionais
             sortino = mean_ret / (std(filter(x -> x < 0, returns .- mean(returns))) * sqrt(12))
             max_dd = maximum_drawdown(returns)
-            calmar = mean_ret / abs(max_dd)
+            # Calmar: usar unidades consistentes (retorno anual em decimal / drawdown em decimal)
+            calmar = (mean_ret / 100) / abs(max_dd)
             
             # Estatísticas
-            skew = length(returns) > 3 ? skewness(returns) : NaN
-            kurt = length(returns) > 3 ? kurtosis(returns) : NaN
+            clean_returns = filter(!ismissing, returns)
+            skew = length(clean_returns) > 3 ? skewness(Vector{Float64}(clean_returns)) : NaN
+            kurt = length(clean_returns) > 3 ? kurtosis(Vector{Float64}(clean_returns)) : NaN
             
             results[string(col)] = Dict(
                 :annual_return => mean_ret,
@@ -343,10 +417,20 @@ end
 Calcula drawdown máximo
 """
 function maximum_drawdown(returns::Vector{Float64})
-    cumulative = cumprod(1 .+ returns)
+    # returns em % → converter para decimais para compor
+    cumulative = cumprod(1 .+ returns ./ 100)
     running_max = accumulate(max, cumulative)
     drawdowns = (cumulative .- running_max) ./ running_max
     return minimum(drawdowns)
+end
+
+# Overload para aceitar Vector com missings
+function maximum_drawdown(returns::Vector{Union{Missing, Float64}})
+    clean_returns = filter(!ismissing, returns)
+    if isempty(clean_returns)
+        return 0.0
+    end
+    return maximum_drawdown(Vector{Float64}(clean_returns))
 end
 
 # Função helper para skewness
@@ -472,7 +556,7 @@ Análise de subperíodos
 """
 function analyze_subperiods(all_results::Dict, config::AnalysisConfig)
     # Dividir período em metades
-    mid_date = config.start_date + Day(Int((config.end_date - config.start_date).value / 2))
+    mid_date = config.start_date + Day(div((config.end_date - config.start_date).value, 2))
     
     subperiod_results = Dict()
     
@@ -648,19 +732,28 @@ function create_all_visualizations(all_results::Dict, output_dir::String)
         portfolios_df = results["portfolios"]
         performance = results["performance"]
         
-        # Plot 1: Retornos cumulativos
-        plot_cumulative_returns(portfolios_df, joinpath(figures_dir, "cumulative_lb$(lookback).png"))
-        
-        # Plot 2: Rolling Sharpe
-        plot_rolling_metrics(portfolios_df, joinpath(figures_dir, "rolling_sharpe_lb$(lookback).png"))
-        
-        # Plot 3: Comparação de quintis
-        plot_quintile_comparison(performance, joinpath(figures_dir, "quintiles_lb$(lookback).png"))
-        
-        # Plot 4: Factor loadings (se disponível)
-        if results["factor_results"] !== nothing
-            plot_factor_loadings(results["factor_results"], joinpath(figures_dir, "factors_lb$(lookback).png"))
-        end
+        # Plot 1: Retornos cumulativos por quintil (usa Visualization)
+        Visualization.plot_quintile_returns(portfolios_df;
+            savepath = joinpath(figures_dir, "cumulative_lb$(lookback).png"),
+            show_plot = false)
+
+        # Plot 2: Resumo de performance (substitui rolling metrics)
+        Visualization.create_performance_summary_plot(portfolios_df;
+            savepath = joinpath(figures_dir, "quintiles_lb$(lookback).png"),
+            show_plot = false)
+
+        # Plot 3: Gráfico de barras de retornos anuais da estratégia low-high
+        Visualization.plot_annual_returns_bars(portfolios_df;
+            savepath = joinpath(figures_dir, "annual_returns_lb$(lookback).png"),
+            show_plot = false)
+
+        # Plot 4: Gráfico de barras de Sharpe anual da estratégia low-high
+        Visualization.plot_annual_sharpe_bars(portfolios_df;
+            savepath = joinpath(figures_dir, "annual_sharpe_lb$(lookback).png"),
+            show_plot = false)
+
+        # Opcional: se houver resultados de fatores, poderíamos gerar gráficos específicos
+        # Não há função de plot de fatores no módulo Visualization atualmente.
     end
     
     println("   📈 Visualizações criadas em: $figures_dir")
@@ -761,7 +854,12 @@ end
 """
 Gera relatório final consolidado
 """
-function generate_final_report(all_results::Dict, config::AnalysisConfig, output_dir::String)
+function generate_final_report(all_results::Dict, config::AnalysisConfig, output_dir::String, failed_tickers::Vector{String}, universe::Vector{String})
+    # Calcular estatísticas de sucesso
+    total_tickers = length(universe)
+    successful_tickers = total_tickers - length(failed_tickers)
+    success_rate = round((successful_tickers / total_tickers) * 100, digits=2)
+    
     summary = Dict(
         "analysis_period" => Dict(
             "start" => string(config.start_date),
@@ -769,6 +867,13 @@ function generate_final_report(all_results::Dict, config::AnalysisConfig, output
         ),
         "lookback_periods" => config.lookback_periods,
         "factor_models" => config.factor_models,
+        "ticker_statistics" => Dict(
+            "total_tickers" => total_tickers,
+            "successful_tickers" => successful_tickers,
+            "failed_tickers_count" => length(failed_tickers),
+            "success_rate" => success_rate,
+            "failed_tickers" => failed_tickers
+        ),
         "results_summary" => Dict()
     )
     
@@ -787,6 +892,30 @@ function generate_final_report(all_results::Dict, config::AnalysisConfig, output
     summary_file = joinpath(output_dir, "final_summary.json")
     open(summary_file, "w") do io
         JSON.print(io, summary, 2)
+    end
+    
+    # Salvar relatório de tickers falhados
+    if !isempty(failed_tickers)
+        failed_tickers_file = joinpath(output_dir, "failed_tickers_report.txt")
+        open(failed_tickers_file, "w") do io
+            println(io, "RELATÓRIO DE TICKERS FALHADOS")
+            println(io, "=" ^ 40)
+            println(io, "Período: $(config.start_date) até $(config.end_date)")
+            println(io, "Gerado em: $(now())")
+            println(io)
+            println(io, "ESTATÍSTICAS:")
+            println(io, "Total de tickers no universo: $total_tickers")
+            println(io, "Tickers com sucesso: $successful_tickers")
+            println(io, "Tickers que falharam: $(length(failed_tickers))")
+            println(io, "Taxa de sucesso: $success_rate%")
+            println(io)
+            println(io, "TICKERS QUE FALHARAM:")
+            println(io, "-" ^ 25)
+            for (i, ticker) in enumerate(failed_tickers)
+                println(io, "$i. $ticker")
+            end
+        end
+        println("❌ Tickers falhados: $failed_tickers_file")
     end
     
     println("📊 Resumo final: $summary_file")

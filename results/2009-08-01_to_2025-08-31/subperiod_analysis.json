@@ -1,0 +1,138 @@
+{
+  "second_half_12": {
+    "P5": {
+      "annual_vol": 26.807884103875814,
+      "max_drawdown": -0.4121364311345893,
+      "calmar_ratio": 0.36582105880133897,
+      "n_months": 96.0,
+      "sortino_ratio": 0.7679614949345518,
+      "skewness": -0.22571846107525181,
+      "sharpe_ratio": 0.5624024075307865,
+      "annual_return": 15.076818560826059,
+      "kurtosis": 3.0437846548931766
+    },
+    "LowMinusHigh": {
+      "annual_vol": 19.491863799741072,
+      "max_drawdown": -0.5404269941007432,
+      "calmar_ratio": -0.09746203396983302,
+      "n_months": 96.0,
+      "sortino_ratio": -0.381091974395744,
+      "skewness": -0.208694769992075,
+      "sharpe_ratio": -0.2702210245177327,
+      "annual_return": -5.267111405726139,
+      "kurtosis": 1.9819794220491342
+    },
+    "P2": {
+      "annual_vol": 15.997657947400318,
+      "max_drawdown": -0.21159251773806612,
+      "calmar_ratio": 0.5129645742173541,
+      "n_months": 96.0,
+      "sortino_ratio": 0.9315056498210936,
+      "skewness": -0.44161558191094613,
+      "sharpe_ratio": 0.6784709744761303,
+      "annual_return": 10.853946576908504,
+      "kurtosis": 0.5363714906656565
+    },
+    "P1": {
+      "annual_vol": 13.879156603291554,
+      "max_drawdown": -0.19428741011603795,
+      "calmar_ratio": 0.5049069905888952,
+      "n_months": 96.0,
+      "sortino_ratio": 0.9945642772813819,
+      "skewness": -0.4172246793875889,
+      "sharpe_ratio": 0.7067941832123624,
+      "annual_return": 9.80970715509992,
+      "kurtosis": 0.39523721800478606
+    },
+    "P4": {
+      "annual_vol": 20.633826064583133,
+      "max_drawdown": -0.3146533200704448,
+      "calmar_ratio": 0.4040903911709551,
+      "n_months": 96.0,
+      "sortino_ratio": 0.8830151646081462,
+      "skewness": -0.30166648037210403,
+      "sharpe_ratio": 0.6162133129965132,
+      "annual_return": 12.714838319050576,
+      "kurtosis": 0.7301947590871536
+    },
+    "P3": {
+      "annual_vol": 17.98182906716179,
+      "max_drawdown": -0.2586372423801078,
+      "calmar_ratio": 0.43598561778241807,
+      "n_months": 96.0,
+      "sortino_ratio": 0.9165329573884397,
+      "skewness": -0.397262811277977,
+      "sharpe_ratio": 0.6270892548220092,
+      "annual_return": 11.27621179006323,
+      "kurtosis": 0.5883980422337172
+    }
+  },
+  "first_half_12": {
+    "P5": {
+      "annual_vol": 18.81346892870934,
+      "max_drawdown": -0.30951385969294354,
+      "calmar_ratio": 0.4840362192978605,
+      "n_months": 84.0,
+      "sortino_ratio": 1.2461336561949772,
+      "skewness": 0.25449803810787647,
+      "sharpe_ratio": 0.7963226719844412,
+      "annual_return": 14.981591846606085,
+      "kurtosis": 2.1432043023060343
+    },
+    "LowMinusHigh": {
+      "annual_vol": 15.17218810257025,
+      "max_drawdown": -0.2848550534072633,
+      "calmar_ratio": -0.012767271264758353,
+      "n_months": 84.0,
+      "sortino_ratio": -0.031929993063643004,
+      "skewness": -0.3555360237362055,
+      "sharpe_ratio": -0.02397031801478695,
+      "annual_return": -0.3636821737987759,
+      "kurtosis": 1.6784392631834466
+    },
+    "P2": {
+      "annual_vol": 10.702956720709842,
+      "max_drawdown": -0.15102215762927831,
+      "calmar_ratio": 1.115389356509176,
+      "n_months": 84.0,
+      "sortino_ratio": 2.2976218011964864,
+      "skewness": -0.05584750797297669,
+      "sharpe_ratio": 1.573850213659242,
+      "annual_return": 16.844850721674806,
+      "kurtosis": 0.38783354258163394
+    },
+    "P1": {
+      "annual_vol": 8.958646339308995,
+      "max_drawdown": -0.07435064421146974,
+      "calmar_ratio": 1.9660770700561427,
+      "n_months": 84.0,
+      "sortino_ratio": 2.8636394684491715,
+      "skewness": -0.10815972815697333,
+      "sharpe_ratio": 1.6317096488859537,
+      "annual_return": 14.617909672807315,
+      "kurtosis": -0.4878858286667884
+    },
+    "P4": {
+      "annual_vol": 15.216178481516524,
+      "max_drawdown": -0.24888915325681593,
+      "calmar_ratio": 0.6414013503835909,
+      "n_months": 84.0,
+      "sortino_ratio": 1.5942590268283292,
+      "skewness": 0.2579582156144653,
+      "sharpe_ratio": 1.0491322718688296,
+      "annual_return": 15.963783899475027,
+      "kurtosis": 1.8990819297255817
+    },
+    "P3": {
+      "annual_vol": 12.197772076759248,
+      "max_drawdown": -0.20821455882096265,
+      "calmar_ratio": 0.7754770566604866,
+      "n_months": 84.0,
+      "sortino_ratio": 1.9730716729399325,
+      "skewness": -0.06049284605259527,
+      "sharpe_ratio": 1.323730368236563,
+      "annual_return": 16.146561322834188,
+      "kurtosis": 0.7897639951560338
+    }
+  }
+}

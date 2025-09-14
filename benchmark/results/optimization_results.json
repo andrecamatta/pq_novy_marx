@@ -1,0 +1,38 @@
+{
+  "comparison": {
+    "return_difference": -1.6999101991281105,
+    "rsp_agg_better_sharpe": false,
+    "sharpe_difference": -0.14376074580360276,
+    "rsp_agg_better_return": false
+  },
+  "analysis_date": "2025-09-14T12:07:18.681",
+  "period": {
+    "start": "2010-09-01",
+    "end": "2025-08-31",
+    "months": 180
+  },
+  "optimization": {
+    "optimal_weight_agg": 0.26486986148427216,
+    "achieved_volatility": 11.829999999959014,
+    "target_volatility": 11.83,
+    "optimal_weight_rsp": 0.7351301385157278
+  },
+  "p1_metrics": {
+    "annual_vol": 11.829235080253339,
+    "max_drawdown": -0.19428741011603795,
+    "calmar_ratio": 0.6203971214345663,
+    "n_months": 180.0,
+    "sortino_ratio": 1.4412544406132515,
+    "sharpe_ratio": 1.0189614894726189,
+    "annual_return": 12.053534996696698
+  },
+  "rsp_agg_metrics": {
+    "annual_vol": 11.82999999995901,
+    "max_drawdown": -0.19325437050666475,
+    "calmar_ratio": 0.5357511331011022,
+    "n_months": 180,
+    "sortino_ratio": 1.1858944384504668,
+    "sharpe_ratio": 0.8752007436690161,
+    "annual_return": 10.353624797568587
+  }
+}

@@ -4,7 +4,8 @@
 
 module FamaFrenchFactors
 
-using HTTP, CSV, DataFrames, Dates, Statistics, Printf
+using CSV, DataFrames, Dates, Statistics, Printf
+using Downloads, ZipFile
 
 export download_fama_french_factors, get_ff_factors, get_ff5_factors, summarize_factors, 
        save_factors_cache, load_factors_cache, factors_cache_exists
@@ -13,7 +14,7 @@ export download_fama_french_factors, get_ff_factors, get_ff5_factors, summarize_
 Verifica se existe cache para os fatores.
 """
 function factors_cache_exists(cache_dir::String = "data/cache/factors")::Bool
-    abs_cache_dir = isabspath(cache_dir) ? cache_dir : joinpath(pwd(), cache_dir)
+    abs_cache_dir = isabspath(cache_dir) ? cache_dir : normpath(joinpath(@__DIR__, "..", cache_dir))
     cache_file = joinpath(abs_cache_dir, "ff5_factors.csv")
     return isfile(cache_file)
 end
@@ -22,8 +23,8 @@ end
 Salva dados de fatores no cache.
 """
 function save_factors_cache(data::DataFrame, cache_dir::String = "data/cache/factors")::Nothing
-    # Usar caminho absoluto se não for absoluto já
-    abs_cache_dir = isabspath(cache_dir) ? cache_dir : joinpath(pwd(), cache_dir)
+    # Usar caminho absoluto baseado no diretório do pacote se relativo
+    abs_cache_dir = isabspath(cache_dir) ? cache_dir : normpath(joinpath(@__DIR__, "..", cache_dir))
     mkpath(abs_cache_dir)  # Criar diretório se não existir
     cache_file = joinpath(abs_cache_dir, "ff5_factors.csv")
     CSV.write(cache_file, data)
@@ -34,7 +35,7 @@ end
 Carrega dados de fatores do cache.
 """
 function load_factors_cache(cache_dir::String = "data/cache/factors")::Union{DataFrame, Nothing}
-    abs_cache_dir = isabspath(cache_dir) ? cache_dir : joinpath(pwd(), cache_dir)
+    abs_cache_dir = isabspath(cache_dir) ? cache_dir : normpath(joinpath(@__DIR__, "..", cache_dir))
     cache_file = joinpath(abs_cache_dir, "ff5_factors.csv")
     if isfile(cache_file)
         try
@@ -69,9 +70,9 @@ function download_fama_french_factors(
     verbose && println("📥 Obtendo dados reais de fatores Fama-French 5...")
     verbose && println("   Cache: $(force ? "FORÇAR download" : "usar cache se disponível")")
     
-    # Armazenar diretório original para cache
-    original_dir = pwd()
-    cache_dir = joinpath(original_dir, "data/cache/factors")
+    # Diretório do pacote para cache
+    pkg_dir = normpath(joinpath(@__DIR__, ".."))
+    cache_dir = joinpath(pkg_dir, "data/cache/factors")
     
     # Verificar cache primeiro (a menos que force=true)
     if !force && factors_cache_exists(cache_dir)
@@ -98,37 +99,33 @@ function download_fama_french_factors(
     try
         # Download ZIP file
         verbose && println("   📡 Downloading from: $(url)")
-        response = HTTP.get(url, timeout=30)
-        
-        if response.status != 200
-            error("HTTP request failed with status $(response.status)")
-        end
-        
-        verbose && println("   ✅ Downloaded $(length(response.body)) bytes")
-        
-        # Save temporary ZIP
         temp_zip = tempname() * ".zip"
-        open(temp_zip, "w") do f
-            write(f, response.body)
-        end
-        
-        # Extract ZIP file
-        temp_dir = mktempdir()
-        cd(temp_dir) do
-            run(`unzip -q $temp_zip`)
-            
-            # Find CSV file
-            csv_files = filter(f -> endswith(lowercase(f), ".csv"), readdir("."))
-            
-            if isempty(csv_files)
-                error("No CSV file found in downloaded ZIP")
+        Downloads.download(url, temp_zip)
+        file_size = filesize(temp_zip)
+        verbose && println("   ✅ Downloaded $(file_size) bytes")
+
+        # Read ZIP and extract CSV content in-memory
+        csv_content = nothing
+        zr = ZipFile.Reader(temp_zip)
+        try
+            # Find first .csv entry
+            for f in zr.files
+                if endswith(lowercase(f.name), ".csv")
+                    verbose && println("   📄 Found CSV file inside ZIP: $(f.name)")
+                    csv_content = String(read(f))
+                    break
+                end
             end
-            
-            csv_file = csv_files[1]
-            verbose && println("   📄 Found CSV file: $csv_file")
-            
-            # Read raw content to locate data section
-            csv_content = read(csv_file, String)
+        finally
+            close(zr)
+        end
+
+        if csv_content === nothing
+            error("No CSV file found in downloaded ZIP")
+        end
+
+        # Parse CSV content
+        let
             lines = split(csv_content, "\n")
             
             verbose && println("   🔍 Parsing CSV structure ($(length(lines)) lines)...")
@@ -174,14 +171,8 @@ function download_fama_french_factors(
             
             # Create clean CSV content and save to temporary file
             clean_csv = join(data_section, "\n")
-            temp_clean_csv = "ff_factors_clean.csv"
-            open(temp_clean_csv, "w") do f
-                write(f, clean_csv)
-            end
-            
-            # Read with CSV.jl for reliable parsing
             verbose && println("   📈 Parsing with CSV.jl...")
-            df_raw = CSV.read(temp_clean_csv, DataFrame)
+            df_raw = CSV.read(IOBuffer(clean_csv), DataFrame)
             
             # Create properly formatted DataFrame
             df_factors = DataFrame(
@@ -241,19 +232,31 @@ function download_fama_french_factors(
             
             # Salvar no cache para uso futuro (salvamos todos os dados, não apenas o filtrado)
             if nrow(df_factors) > 0
-                cache_dir = joinpath(original_dir, "data/cache/factors")
+                cache_dir = joinpath(pkg_dir, "data/cache/factors")
                 save_factors_cache(df_factors, cache_dir)
                 verbose && println("   💾 Dados salvos no cache")
             end
-            
-            # Cleanup temporary files
+
+            # Cleanup temporary ZIP
             rm(temp_zip, force=true)
-            rm(temp_clean_csv, force=true)
-            
+
             return filtered_factors
-        end
+        end # let
         
     catch e
+        # Fallback: tentar retornar dados do cache, se existirem
+        try
+            cache_dir = joinpath(normpath(joinpath(@__DIR__, "..")), "data/cache/factors")
+            cached = load_factors_cache(cache_dir)
+            if cached !== nothing
+                result_data = filter(row -> start_date <= row.Date <= end_date, cached)
+                if nrow(result_data) > 0
+                    @warn "Erro no download, usando dados do cache: $e"
+                    return result_data
+                end
+            end
+        catch _
+        end
         error("Error downloading/parsing Fama-French data: $e")
     end
 end

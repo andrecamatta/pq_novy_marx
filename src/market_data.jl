@@ -1,5 +1,7 @@
 # Real Market Data Module
-# Downloads actual stock price data using hybrid Stooq bulk + Tiingo system
+# ⚠️  Sistema híbrido: Stooq BULK MANUAL + Tiingo API fallback
+# Stooq = arquivo bulk pré-baixado (sem downloads automáticos)
+# Tiingo = API fallback para tickers não encontrados no bulk
 # Creates portfolios based on real historical volatility
 
 module MarketData
@@ -10,9 +12,9 @@ using CSV, DataFrames, Dates, Statistics, StatsBase, JSON
 include("stooq_data.jl")
 using .StooqData
 
-# Importar sistema de resolução de tickers
-include("ticker_resolver.jl")
-using .TickerResolver
+# Importar sistema de configuração de tickers
+include("ticker_config.jl") 
+using .TickerConfig
 
 # Importar sistema Tiingo
 include("tiingo_data.jl")
@@ -24,40 +26,14 @@ export load_sp500_constituents, download_stock_data, calculate_returns,
        calculate_252d_volatility, load_historical_sp500_constituents, get_universe_for_period,
        get_eligible_tickers_for_date, clean_ticker_for_stooq, get_quintile_portfolios_pti,
        get_valid_tickers_for_month, get_ticker_validity_period, create_validity_metadata,
-       get_ticker_data_hybrid, load_ticker_mappings, test_hybrid_system,
+       get_ticker_data_hybrid, test_hybrid_system,
        download_stock_data_hybrid
 
 # =================================================================
 # SISTEMA HÍBRIDO STOOQ + TIINGO
 # =================================================================
 
-# Cache global para mapeamentos
-const TICKER_MAPPINGS_CACHE = Ref{Union{Dict, Nothing}}(nothing)
-
-"""
-Carregar mapeamentos de ticker do arquivo JSON.
-"""
-function load_ticker_mappings(;force_reload::Bool = false)::Dict
-    if TICKER_MAPPINGS_CACHE[] !== nothing && !force_reload
-        return TICKER_MAPPINGS_CACHE[]
-    end
-    
-    mappings_file = joinpath(@__DIR__, "..", "data", "ticker_mappings.json")
-    
-    if isfile(mappings_file)
-        try
-            data = JSON.parsefile(mappings_file)
-            TICKER_MAPPINGS_CACHE[] = data
-            return data
-        catch e
-            @warn "Erro carregando mapeamentos: $e"
-            return Dict("renames" => Dict())
-        end
-    else
-        @warn "Arquivo de mapeamentos não encontrado: $mappings_file"
-        return Dict("renames" => Dict())
-    end
-end
+# Sistema de mapeamentos migrado para TickerConfig (YAML)
 
 """
 Obter dados de ticker usando sistema híbrido Stooq bulk + Tiingo.
@@ -72,40 +48,135 @@ function get_ticker_data_hybrid(
     start_date::Date, 
     end_date::Date;
     verbose::Bool = true,
-    use_tiingo::Bool = true
+    use_tiingo::Bool = true,
+    allow_stitching::Bool = true
 )::DataFrame
     
+    # PASSO 0: Stitching temporal (somente se explicitamente permitido nesta chamada)
+    if allow_stitching
+        try
+            cfg = TickerConfig.load_ticker_config()
+            policy = get(cfg, "policy", Dict())
+            dq_rules = get(cfg, "data_quality_rules", Dict())
+            stitching = get(dq_rules, "temporal_stitching", Dict())
+            forced_mode = get(policy, "forced_sale_mode", "default")
+            for (chain_name, chain_info) in stitching
+                periods = get(chain_info, "periods", [])
+                chain_type = get(chain_info, "type", "complex")
+                allow_when_strict = get(chain_info, "allow_when_strict", false)
+                involved = any(uppercase(get(p, "ticker", "")) == uppercase(ticker) for p in periods)
+                if !involved
+                    continue
+                end
+                # Em modo strict, só permitir cadeias de rename ou explicitamente permitidas
+                allowed_chain = forced_mode != "strict" || chain_type == "rename" || allow_when_strict
+                if !allowed_chain
+                    continue
+                end
+                verbose && println("   🔗 Stitching temporal detectado ($chain_name) para $ticker")
+                frames = DataFrame[]
+                for p in periods
+                    pticker = get(p, "ticker", "")
+                    pstart = try
+                        Date(get(p, "start_date", string(start_date)))
+                    catch
+                        start_date
+                    end
+                    pend = try
+                        ed = get(p, "end_date", nothing)
+                        ed === nothing ? end_date : Date(ed)
+                    catch
+                        end_date
+                    end
+                    # Interseção com janela solicitada
+                    seg_start = max(start_date, pstart)
+                    seg_end = min(end_date, pend)
+                    if seg_start <= seg_end
+                        # Chamada segmentada SEM stitching (para evitar recursão)
+                        seg_df = get_ticker_data_hybrid(pticker, seg_start, seg_end; verbose=false, use_tiingo=use_tiingo, allow_stitching=false)
+                        if nrow(seg_df) > 0
+                            push!(frames, seg_df)
+                        end
+                    end
+                end
+                if !isempty(frames)
+                    stitched = sort(vcat(frames...), :date)
+                    verbose && println("   ✅ Stitching: $(nrow(stitched)) pontos obtidos via cadeia $chain_name")
+                    return stitched
+                end
+            end
+        catch e
+            verbose && println("   ⚠️  Erro aplicando stitching temporal: $e")
+        end
+    end
+
     if verbose
         println("🔄 Buscando $ticker via sistema híbrido...")
     end
     
-    # Carregar mapeamentos
-    mappings = load_ticker_mappings()
-    renames = get(mappings, "renames", Dict())
-    acquired = get(mappings, "acquired_companies", Dict())
-    
-    # PASSO 1: Verificar se é renomeação
-    actual_ticker = ticker
-    if haskey(renames, ticker)
-        actual_ticker = renames[ticker]
-        if verbose
-            println("   🔄 Renomeação detectada: $ticker → $actual_ticker")
+    # PASSO 1: Usar resolução completa com informações temporais
+    resolution = resolve_ticker_with_temporal_info(ticker)
+    actual_ticker = resolution.ticker
+    forced_sale = resolution.forced_sale
+    cutoff_date = resolution.cutoff_date
+
+    if actual_ticker != ticker && verbose
+        println("   🔄 Resolução YAML: $ticker → $actual_ticker")
+        if forced_sale && cutoff_date !== nothing
+            println("   ⚠️  FORCED SALE detectado: dados truncados em $cutoff_date")
+        end
+    end
+
+    # PASSO 1.5: Ajustar end_date se há forced sale
+    effective_end_date = end_date
+    if forced_sale && cutoff_date !== nothing
+        try
+            forced_sale_date = Date(cutoff_date)
+            if forced_sale_date < end_date
+                effective_end_date = forced_sale_date
+                if verbose
+                    println("   ✂️  Truncando período: $end_date → $effective_end_date (forced sale)")
+                end
+            end
+        catch e
+            if verbose
+                println("   ⚠️  Erro ao parsear data de forced sale: $cutoff_date")
+            end
         end
     end
     
-    # PASSO 1.1: Verificar se é empresa adquirida
-    is_acquired = haskey(acquired, ticker)
+    # Carregar configuração apenas para verificações de aquisições
+    config = TickerConfig.load_ticker_config()
+    actions = get(config, "corporate_actions", Dict())
+    acquisitions = get(actions, "acquisitions", Dict())
+
+    # PASSO 1.1: Verificar se é empresa adquirida (considerar ticker resolvido e original)
+    lookup_key = haskey(acquisitions, actual_ticker) ? actual_ticker : (haskey(acquisitions, ticker) ? ticker : nothing)
+    is_acquired = lookup_key !== nothing
     acquisition_date = nothing
     if is_acquired
-        acquisition_date = Date(acquired[ticker]["date"])
+        date_str = get(acquisitions[lookup_key], "date", nothing)
+        if date_str !== nothing
+            acquisition_date = Date(date_str)
+        end
         if verbose
-            println("   🏢 Empresa adquirida em $acquisition_date - usando Tiingo prioritário")
+            println("   🏢 Empresa adquirida: $(lookup_key)$(acquisition_date === nothing ? "" : " em $(acquisition_date)") - priorizando Tiingo")
         end
     end
     
-    # PASSO 2: Para empresas adquiridas, pular Stooq e ir direto ao Tiingo
-    if !is_acquired
-        # PASSO 2A: Tentar Stooq bulk primeiro (apenas se não for adquirida)
+    # PASSO 2: Sempre tentar Stooq bulk primeiro (mesmo se adquirido)
+    # Preferências de fonte (YAML: temporary_issues.<ticker>.prefer_tiingo)
+    prefer_tiingo = false
+    try
+        cfg_pref = TickerConfig.load_ticker_config()
+        tmp_issues = get(get(cfg_pref, "data_quality_rules", Dict()), "temporary_issues", Dict())
+        pref_keys = [ticker, actual_ticker]
+        prefer_tiingo = any(haskey(tmp_issues, k) && get(tmp_issues[k], "prefer_tiingo", false) for k in pref_keys)
+    catch
+        prefer_tiingo = false
+    end
+
+    if !prefer_tiingo
         if verbose && actual_ticker != ticker
             println("   📦 Buscando $actual_ticker no Stooq bulk...")
         else
@@ -113,14 +184,14 @@ function get_ticker_data_hybrid(
         end
         
         try
-            # Usar sistema de download bulk do Stooq
-            stooq_data = download_stooq_bulk_us([actual_ticker], verbose=false)
+            # Usar leitura seletiva do ZIP bulk do Stooq (evita dependência de índice)
+            stooq_data = StooqData.download_stooq_bulk_us_selective([actual_ticker], verbose=false)
             
             if haskey(stooq_data, actual_ticker) && nrow(stooq_data[actual_ticker]) > 0
                 df = stooq_data[actual_ticker]
                 
                 # Filtrar por período
-                df_filtered = filter(row -> row.date >= start_date && row.date <= end_date, df)
+                df_filtered = filter(row -> row.date >= start_date && row.date <= effective_end_date, df)
                 
                 if nrow(df_filtered) > 0
                     if verbose
@@ -131,7 +202,7 @@ function get_ticker_data_hybrid(
             end
             
             if verbose
-                println("   ❌ Stooq: Nenhum dado encontrado")
+                println("   ❌ Stooq: Nenhum dado encontrado no período solicitado")
             end
             
         catch e
@@ -139,34 +210,159 @@ function get_ticker_data_hybrid(
                 println("   ❌ Erro no Stooq: $e")
             end
         end
+    else
+        verbose && println("   ⏭️  Preferência YAML: pulando Stooq e priorizando Tiingo para $ticker")
     end
     
-    # PASSO 3: Fallback para Tiingo (ticker original, não renomeado)
+    # PASSO 3: Fallback inteligente para Tiingo baseado em tipo de ação corporativa
     if use_tiingo
-        if verbose
-            println("   🌐 Tentando Tiingo como fallback para $ticker...")
-        end
-        
-        try
-            tiingo_data = get_historical_prices(ticker,
-                                              start_date=start_date,
-                                              end_date=end_date,
-                                              verbose=verbose)
-            
-            if nrow(tiingo_data) > 0
-                if verbose
-                    println("   ✅ Tiingo: $(nrow(tiingo_data)) pontos encontrados")
-                end
-                return tiingo_data
-            else
-                if verbose
-                    println("   ❌ Tiingo: Nenhum dado encontrado")
+        # Verificar se tem cobertura Tiingo
+        tiingo_coverage = get(resolution.metadata, "tiingo_coverage", true)
+        action_type = get(resolution.metadata, "type", "")
+        # Usar o método real da resolução (não vem dentro do metadata)
+        resolution_method = getfield(resolution, :resolution_method)
+
+        if !tiingo_coverage
+            if verbose
+                println("   ⚠️  Sem cobertura Tiingo: $(get(resolution.metadata, "note", "ticker pré-2015 ou sem dados"))")
+            end
+        else
+            # Estratégia de fallback baseada no tipo de ação corporativa e forced sale
+            fallback_strategy = determine_fallback_strategy(action_type, resolution_method, forced_sale)
+
+            if verbose
+                println("   🌐 Tiingo fallback ($(fallback_strategy)) para $ticker...")
+                println("   📋 Resolução: método=$(resolution_method), ação=$(action_type)")
+                if haskey(resolution.metadata, "note")
+                    println("   📝 Nota: $(resolution.metadata["note"])")
                 end
             end
+
+            try
+                success = false
+                tiingo_data = DataFrame()
+
+                # Aplicar estratégia específica
+                if fallback_strategy == "direct_only"
+                    # Em forced sale, preferir o ticker resolvido (ex.: OTC) se diferente
+                    primary_ticker = actual_ticker != ticker ? actual_ticker : ticker
+                    tiingo_data = get_historical_prices(primary_ticker,
+                                                      start_date=start_date,
+                                                      end_date=effective_end_date,
+                                                      verbose=verbose)
+                    success = nrow(tiingo_data) > 0
+
+                elseif fallback_strategy == "try_both"
+                    # Tentar resolvido primeiro (ex.: RX→IQV), depois original
+                    if actual_ticker != ticker
+                        if verbose
+                            println("   🔁 Tiingo: tentando ticker resolvido $actual_ticker...")
+                        end
+                        tiingo_data = get_historical_prices(actual_ticker,
+                                                          start_date=start_date,
+                                                          end_date=effective_end_date,
+                                                          verbose=verbose)
+                        success = nrow(tiingo_data) > 0
+                    end
+
+                    if !success
+                        tiingo_data = get_historical_prices(ticker,
+                                                          start_date=start_date,
+                                                          end_date=effective_end_date,
+                                                          verbose=verbose)
+                        success = nrow(tiingo_data) > 0
+                    end
+
+                elseif fallback_strategy == "successor_preferred"
+                    # Primeiro sucessor, depois original para OTC/falências
+                    if actual_ticker != ticker
+                        if verbose
+                            println("   🔁 Tiingo: tentando sucessor $actual_ticker primeiro...")
+                        end
+                        tiingo_data = get_historical_prices(actual_ticker,
+                                                          start_date=start_date,
+                                                          end_date=effective_end_date,
+                                                          verbose=verbose)
+                        success = nrow(tiingo_data) > 0
+                    end
+
+                    if !success
+                        tiingo_data = get_historical_prices(ticker,
+                                                          start_date=start_date,
+                                                          end_date=effective_end_date,
+                                                          verbose=verbose)
+                        success = nrow(tiingo_data) > 0
+                    end
+
+                end
+
+                # Se falhou na estratégia principal, tentar alternativas temporárias (YAML)
+                if !success
+                    try
+                        cfg2 = TickerConfig.load_ticker_config()
+                        dq = get(cfg2, "data_quality_rules", Dict())
+                        tmp = get(dq, "temporary_issues", Dict())
+                        for key in [ticker, actual_ticker]
+                            if haskey(tmp, key) && haskey(tmp[key], "alternatives")
+                                alts = tmp[key]["alternatives"]
+                                for alt in alts
+                                    if verbose
+                                        println("   🔁 Tiingo: tentando alternativa $alt...")
+                                    end
+                                    tiingo_data = get_historical_prices(alt, start_date=start_date, end_date=effective_end_date, verbose=verbose)
+                                    if nrow(tiingo_data) > 0
+                                        success = true
+                                        break
+                                    end
+                                end
+                            end
+                            if success; break; end
+                        end
+                    catch
+                    end
+                end
+
+                # Último recurso: Search API (melhor que nada) — filtrar por STOCK/EQUITY
+                if !success
+                    if @isdefined TiingoData
+                        search_results = TiingoData.search_ticker(ticker, verbose=false)
+                        if !isempty(search_results)
+                            # filtrar por equities
+                            eq = filter(r -> uppercase(get(r, "assetType", "")) in ["STOCK", "EQUITY"], search_results)
+                            if !isempty(eq)
+                                best_match = eq[1]
+                                search_ticker = get(best_match, "ticker", "")
+                            else
+                                best_match = search_results[1]
+                                search_ticker = ""
+                            end
+                            if !isempty(search_ticker) && search_ticker != ticker
+                                if verbose
+                                    println("   🔍 Tiingo: tentando resultado da busca $search_ticker...")
+                                end
+                                tiingo_data = get_historical_prices(search_ticker,
+                                                                  start_date=start_date,
+                                                                  end_date=effective_end_date,
+                                                                  verbose=verbose)
+                                success = nrow(tiingo_data) > 0
+                            end
+                        end
+                    end
+                end
+
+                if success
+                    if verbose
+                        println("   ✅ Tiingo ($(fallback_strategy)): $(nrow(tiingo_data)) pontos encontrados")
+                    end
+                    return tiingo_data
+                else
+                    verbose && println("   ❌ Tiingo: Nenhum dado encontrado com estratégia $fallback_strategy")
+                end
             
-        catch e
-            if verbose
-                println("   ❌ Erro no Tiingo: $e")
+            catch e
+                if verbose
+                    println("   ❌ Erro no Tiingo: $e")
+                end
             end
         end
     end
@@ -231,68 +427,86 @@ function download_stock_data_hybrid(
     end_date::Date; 
     verbose::Bool = true,
     use_tiingo::Bool = true,
-    progress_interval::Int = 10
+    progress_interval::Int = 25
 )::Dict{String, DataFrame}
-    
+    # Nova implementação em lote: carrega o índice do Stooq uma única vez
     if verbose
-        println("📊 Download híbrido para $(length(tickers)) tickers")
+        println("📊 Download híbrido (batch) para $(length(tickers)) tickers")
         println("   📅 Período: $start_date a $end_date")
-        println("   🔧 Fontes: Stooq bulk + Tiingo fallback")
+        println("   🔧 Fontes: Stooq bulk (batch) + Tiingo fallback")
     end
-    
+
     results = Dict{String, DataFrame}()
-    failed_count = 0
     stooq_count = 0
     tiingo_count = 0
-    
-    for (i, ticker) in enumerate(tickers)
-        if verbose && (i % progress_interval == 0 || i == length(tickers))
-            println("   📈 Progresso: $i/$(length(tickers)) tickers processados")
+    failed_count = 0
+
+    # 1) Tentar obter o máximo possível via Stooq em UMA chamada
+    stooq_raw = Dict{String, DataFrame}()
+    try
+        # Usar leitura seletiva para não carregar índice inteiro na memória
+        stooq_raw = StooqData.download_stooq_bulk_us_selective(tickers, verbose=verbose)
+    catch e
+        verbose && println("   ⚠️ Erro carregando índice Stooq em lote: $e")
+        stooq_raw = Dict{String, DataFrame}()
+    end
+
+    # Converter formato e filtrar período
+    for (ticker, raw) in stooq_raw
+        if nrow(raw) == 0
+            continue
         end
-        
-        data = get_ticker_data_hybrid(ticker, start_date, end_date, 
-                                     verbose=false, use_tiingo=use_tiingo)
-        
-        if nrow(data) > 0
-            # Converter para formato esperado pelo sistema existente
-            formatted_data = DataFrame(
-                date = data.date,
-                price = data.close
-            )
-            results[ticker] = formatted_data
-            
-            # Contar fonte usada (verificar se foi renomeação ou não)
-            mappings = load_ticker_mappings()
-            renames = get(mappings, "renames", Dict())
-            
-            if haskey(renames, ticker) || nrow(data) > 50
-                stooq_count += 1  # Provavelmente veio do Stooq
-            else
-                tiingo_count += 1  # Provavelmente veio do Tiingo
-            end
-        else
-            failed_count += 1
+        # Filtrar por período solicitado e converter para formato padrão
+        filtered = filter(row -> start_date <= row.date <= end_date, raw)
+        if nrow(filtered) == 0
+            continue
+        end
+        results[ticker] = DataFrame(date = filtered.date, price = filtered.close)
+        stooq_count += 1
+    end
+
+    # 2) Identificar faltantes e usar Tiingo como fallback
+    missing = String[]
+    for t in tickers
+        if !haskey(results, t)
+            push!(missing, t)
         end
     end
-    
+
+    if use_tiingo && !isempty(missing)
+        verbose && println("   🌐 Fallback (YAML-aware) para $(length(missing)) tickers ausentes no Stooq")
+        for (i, t) in enumerate(missing)
+            if verbose && (i % progress_interval == 0 || i == length(missing))
+                println("     📈 Fallback progresso: $i/$(length(missing))")
+            end
+            try
+                # Usar o resolvedor completo para decidir melhor estratégia e truncamentos
+                df_full = get_ticker_data_hybrid(t, start_date, end_date, verbose=false, use_tiingo=true)
+                if nrow(df_full) > 0
+                    results[t] = DataFrame(date = df_full.date, price = df_full.close)
+                    tiingo_count += 1
+                else
+                    failed_count += 1
+                end
+            catch e
+                failed_count += 1
+            end
+        end
+    else
+        failed_count += length(missing)
+    end
+
     # Estatísticas finais
     success_count = length(results)
     success_rate = round(success_count / length(tickers) * 100, digits=1)
-    
     if verbose
-        println("\n📊 RESULTADOS DO DOWNLOAD HÍBRIDO:")
+        println("\n📊 RESULTADOS DO DOWNLOAD HÍBRIDO (BATCH):")
         println("="^50)
         println("✅ Sucessos: $success_count/$(length(tickers)) ($success_rate%)")
+        println("📦 Via Stooq: $stooq_count")
+        println("🌐 Via Tiingo: $tiingo_count")
         println("❌ Falhas: $failed_count")
-        println("📦 Via Stooq: ~$stooq_count tickers")
-        println("🌐 Via Tiingo: ~$tiingo_count tickers")
-        
-        if failed_count > 0
-            failure_rate = round(failed_count / length(tickers) * 100, digits=1)
-            println("📉 Taxa de falha: $failure_rate%")
-        end
     end
-    
     return results
 end
 
@@ -371,6 +585,43 @@ function get_quintile_portfolios_pti(
 end
 
 """
+Determina estratégia de fallback baseada no tipo de ação corporativa.
+"""
+function determine_fallback_strategy(action_type::String, resolution_method::String, forced_sale::Bool=false)::String
+    # Se é forced sale, não devemos seguir para o sucessor
+    if forced_sale
+        return "direct_only"
+    end
+    # Aquisições: apenas ticker original (adquirida pode não existir no Tiingo)
+    if action_type == "acquisition"
+        return "direct_only"
+    end
+
+    # Falências/Chapter 11: preferir sucessor OTC se disponível
+    if action_type in ["bankruptcy", "chapter11"] || contains(resolution_method, "bankruptcy")
+        return "successor_preferred"
+    end
+
+    # Renomeações/rebrandings: tentar ambos (original e novo)
+    if action_type in ["rebranding", "rename"] || contains(resolution_method, "rename")
+        return "try_both"
+    end
+
+    # Mergers: preferir sucessor primeiro
+    if action_type in ["merger", "merger_equals"] || contains(resolution_method, "merger")
+        return "successor_preferred"
+    end
+
+    # Casos não resolvidos: tentar direto no Tiingo (muitos delistados existem lá)
+    if resolution_method == "no_resolution" || isempty(action_type)
+        return "direct_only"
+    end
+
+    # Default: tentar ambos
+    return "try_both"
+end
+
+"""
 Salva dados de preços no cache.
 """
 function save_price_cache(ticker::String, data::DataFrame, cache_dir::String = "data/cache/prices")::Nothing
@@ -426,9 +677,8 @@ function download_stock_data(tickers::Vector{String}, start_date::Date, end_date
         end
         
         # Usar bulk download do StooqData
-        bulk_data = StooqData.download_stooq_bulk_us(
+        bulk_data = StooqData.download_stooq_bulk_us_selective(
             limited_tickers,
-            force_download=force,
             verbose=verbose
         )
         
@@ -504,25 +754,52 @@ function download_stock_data(tickers::Vector{String}, start_date::Date, end_date
                 end
             end
             
-            # Se não tem no cache, baixar do Stooq
+            # Se não tem no cache, tentar baixar com fallbacks
             if data === nothing
-                raw_data = StooqData.download_stooq_ticker(ticker, start_date=start_date, end_date=end_date, verbose=false)
+                data_downloaded = false
                 
-                if nrow(raw_data) > 0
-                    # Converter para formato compatível
-                    data = DataFrame(
-                        date = raw_data.date,
-                        price = raw_data.close
-                    )
-                    
-                    # Salvar no cache
-                    save_price_cache(ticker, data)
-                    downloaded_count += 1
-                    
-                    if verbose && i % 10 == 0
-                        println("   🌐 Baixado: $ticker ($(i)/$(length(limited_tickers)))")
+                # Obter variações do ticker para tentar
+                ticker_variations = normalize_ticker_symbol(ticker)
+                
+                for (attempt, test_ticker) in enumerate(ticker_variations)
+                    if attempt > 3  # Limitar a 3 tentativas para não sobrecarregar
+                        break
                     end
-                else
+                    
+                    try
+                        raw_data = StooqData.download_stooq_ticker(test_ticker, start_date=start_date, end_date=end_date, verbose=false)
+                        
+                        if nrow(raw_data) > 0
+                            # Converter para formato compatível
+                            data = DataFrame(
+                                date = raw_data.date,
+                                price = raw_data.close
+                            )
+                            
+                            # Salvar no cache usando ticker original
+                            save_price_cache(ticker, data)
+                            downloaded_count += 1
+                            data_downloaded = true
+                            
+                            if verbose && (i % 10 == 0 || test_ticker != ticker)
+                                if test_ticker != ticker
+                                    println("   🔄 $ticker → $test_ticker: sucesso!")
+                                else
+                                    println("   🌐 Baixado: $ticker ($(i)/$(length(limited_tickers)))")
+                                end
+                            end
+                            break  # Sucesso, parar tentativas
+                        end
+                    catch e
+                        # Continuar para próxima variação se houver erro
+                        if verbose && attempt == 1  # Só mostrar erro na primeira tentativa
+                            println("   ⚠️  $ticker tentativa $attempt falhou: $(string(e)[1:min(50, length(string(e)))])")
+                        end
+                        continue
+                    end
+                end
+                
+                if !data_downloaded
                     push!(failed_tickers, ticker)
                     continue
                 end
@@ -572,78 +849,104 @@ Calcula retornos mensais a partir de dados de preços diários.
 """
 function calculate_returns(price_data::Dict{String, DataFrame}, 
                           start_date::Date, end_date::Date; verbose::Bool = true)::DataFrame
-    
     if verbose
-        println("📊 Calculando retornos mensais...")
+        println("📊 Calculando retornos mensais (otimizado)...")
     end
-    
-    # Criar datas mensais
+    # Vetor de datas mensais (1º dia de cada mês)
     monthly_dates = collect(Date(year(start_date), month(start_date), 1):Month(1):Date(year(end_date), month(end_date), 1))
-    
-    # DataFrame final com retornos mensais
     returns_df = DataFrame(date = monthly_dates)
-    
+
+    processed = 0
     valid_tickers = String[]
-    
+
     for (ticker, data) in price_data
         try
-            # Garantir que os dados estão ordenados por data
+            if nrow(data) == 0
+                continue
+            end
+            # Ordenar e recortar por período
             sort!(data, :date)
-            
-            monthly_returns = Union{Float64, Missing}[]
-            
-            for i in 1:(length(monthly_dates)-1)
-                current_month = monthly_dates[i]
-                next_month = monthly_dates[i+1]
-                
-                # Preço no final do mês atual e anterior
-                current_data = filter(row -> current_month <= row.date < next_month, data)
-                
-                if nrow(current_data) >= 5  # Pelo menos 5 dias de trading no mês
-                    price_end = last(current_data.price)
-                    
-                    if i == 1
-                        # Primeiro mês: usar primeiro preço disponível
-                        price_start = first(current_data.price)
+            first_idx = searchsortedfirst(data.date, start_date)
+            last_idx = searchsortedlast(data.date, end_date)
+            if last_idx < first_idx
+                continue
+            end
+            dsub = view(data, first_idx:last_idx, :)
+
+            # Construir agregação mensal em uma única passada
+            dates_vec = dsub.date
+            prices_vec = dsub.price
+            months_vec = Date.(year.(dates_vec), month.(dates_vec), 1)
+
+            month_keys = Date[]
+            first_prices = Float64[]
+            last_prices = Float64[]
+            day_counts = Int[]
+
+            if !isempty(months_vec)
+                current_month = months_vec[1]
+                first_p = prices_vec[1]
+                last_p = prices_vec[1]
+                cnt = 1
+                for i in 2:length(months_vec)
+                    if months_vec[i] == current_month
+                        last_p = prices_vec[i]
+                        cnt += 1
                     else
-                        # Usar último preço do mês anterior
-                        prev_month = monthly_dates[i-1]
-                        prev_data = filter(row -> prev_month <= row.date < current_month, data)
-                        if nrow(prev_data) > 0
-                            price_start = last(prev_data.price)
-                        else
-                            price_start = first(current_data.price)
-                        end
+                        push!(month_keys, current_month)
+                        push!(first_prices, first_p)
+                        push!(last_prices, last_p)
+                        push!(day_counts, cnt)
+                        # reset
+                        current_month = months_vec[i]
+                        first_p = prices_vec[i]
+                        last_p = prices_vec[i]
+                        cnt = 1
                     end
-                    
-                    # Calcular retorno mensal em %
-                    monthly_return = (price_end / price_start - 1) * 100
-                    push!(monthly_returns, monthly_return)
-                else
-                    push!(monthly_returns, missing)
                 end
+                # push last group
+                push!(month_keys, current_month)
+                push!(first_prices, first_p)
+                push!(last_prices, last_p)
+                push!(day_counts, cnt)
             end
-            
-            # Adicionar última observação como missing (não temos mês seguinte)
-            push!(monthly_returns, missing)
-            
-            if length(monthly_returns) == length(monthly_dates)
-                returns_df[!, ticker] = monthly_returns
-                push!(valid_tickers, ticker)
+
+            # Mapear retornos por mês conforme regras originais
+            month_to_ret = Dict{Date, Union{Missing, Float64}}()
+            for j in 1:length(month_keys)
+                if day_counts[j] < 5
+                    month_to_ret[month_keys[j]] = missing
+                    continue
+                end
+                # Se mês anterior não é contíguo, usar variação dentro do próprio mês
+                use_prev = j > 1 && month_keys[j] == month_keys[j-1] + Month(1)
+                price_start = use_prev ? last_prices[j-1] : first_prices[j]
+                r = (last_prices[j] / price_start - 1) * 100
+                month_to_ret[month_keys[j]] = r
             end
-            
+
+            # Construir coluna alinhada ao vetor monthly_dates
+            col = Vector{Union{Missing, Float64}}(undef, length(monthly_dates))
+            @inbounds for k in eachindex(monthly_dates)
+                col[k] = get(month_to_ret, monthly_dates[k], missing)
+            end
+            returns_df[!, ticker] = col
+            push!(valid_tickers, ticker)
+            processed += 1
+            if verbose && processed % 100 == 0
+                println("   📈 Processados: $processed tickers")
+            end
         catch e
             if verbose
                 println("   ⚠️ Erro calculando retornos para $ticker: $e")
             end
         end
     end
-    
+
     if verbose
         println("✅ Retornos calculados para $(length(valid_tickers)) ações")
         println("   Período: $(length(monthly_dates)) meses")
     end
-    
     return returns_df
 end
 
@@ -652,74 +955,68 @@ end
 Calcula retornos diários a partir de dados de preços.
 """
 function calculate_daily_returns(price_data::Dict{String, DataFrame}; verbose::Bool = true)::DataFrame
-    
     if verbose
-        println("📊 Calculando retornos diários...")
+        println("📊 Calculando retornos diários (otimizado)...")
     end
-    
-    # Obter todas as datas únicas e ordenar
+    # Agregar todas as datas e ordená-las
     all_dates = Date[]
-    for (ticker, data) in price_data
+    for (_, data) in price_data
         append!(all_dates, data.date)
     end
-    unique_dates = sort(unique(all_dates))
-    
-    # DataFrame final com retornos diários
+    unique_dates = sort!(unique(all_dates))
     returns_df = DataFrame(date = unique_dates)
-    
+
+    processed = 0
     valid_tickers = String[]
-    
     for (ticker, data) in price_data
         try
-            # Garantir que os dados estão ordenados por data
+            if nrow(data) == 0
+                continue
+            end
             sort!(data, :date)
-            
-            daily_returns = Union{Float64, Missing}[]
-            
-            for date in unique_dates
-                # Encontrar preço para esta data
-                price_row = filter(row -> row.date == date, data)
-                if !isempty(price_row)
-                    current_price = price_row.price[1]
-                    
-                    # Encontrar preço do dia anterior
-                    prev_date_idx = findfirst(d -> d < date, reverse(unique_dates))
-                    if prev_date_idx !== nothing
-                        prev_date = reverse(unique_dates)[prev_date_idx]
-                        prev_price_row = filter(row -> row.date == prev_date, data)
-                        
-                        if !isempty(prev_price_row)
-                            prev_price = prev_price_row.price[1]
-                            daily_return = (current_price / prev_price - 1) * 100
-                            push!(daily_returns, daily_return)
-                        else
-                            push!(daily_returns, missing)
-                        end
-                    else
-                        push!(daily_returns, missing)  # Primeiro dia
-                    end
+            # Calcular retornos no próprio vetor do ticker
+            n = nrow(data)
+            ticker_dates = data.date
+            ticker_prices = data.price
+            ticker_rets = Vector{Union{Missing, Float64}}(undef, n)
+            ticker_rets[1] = missing
+            @inbounds for i in 2:n
+                ticker_rets[i] = (ticker_prices[i] / ticker_prices[i-1] - 1) * 100
+            end
+            # Alinhar aos unique_dates em uma única passada (two-pointer)
+            col = Vector{Union{Missing, Float64}}(undef, length(unique_dates))
+            fill!(col, missing)
+            i_t = 1
+            j_d = 1
+            @inbounds while i_t <= n && j_d <= length(unique_dates)
+                dt_t = ticker_dates[i_t]
+                dt_u = unique_dates[j_d]
+                if dt_t == dt_u
+                    col[j_d] = ticker_rets[i_t]
+                    i_t += 1
+                    j_d += 1
+                elseif dt_t > dt_u
+                    j_d += 1
                 else
-                    push!(daily_returns, missing)  # Sem dados para esta data
+                    i_t += 1
                 end
             end
-            
-            if length(daily_returns) == length(unique_dates)
-                returns_df[!, ticker] = daily_returns
-                push!(valid_tickers, ticker)
+            returns_df[!, ticker] = col
+            push!(valid_tickers, ticker)
+            processed += 1
+            if verbose && processed % 200 == 0
+                println("   📈 Processados: $processed tickers")
             end
-            
         catch e
             if verbose
                 println("   ⚠️ Erro calculando retornos diários para $ticker: $e")
             end
         end
     end
-    
     if verbose
         println("✅ Retornos diários calculados para $(length(valid_tickers)) ações")
         println("   Período: $(length(unique_dates)) dias")
     end
-    
     return returns_df
 end
 
@@ -755,6 +1052,41 @@ function calculate_252d_volatility(daily_returns_df::DataFrame, date::Date;
         end
     end
     
+    return volatilities
+end
+
+"""
+Calcula volatilidade de 252 dias diretamente a partir de `price_data` sem construir
+uma matriz de retornos completa. Usa janela móvel até a véspera de `date`.
+"""
+function calculate_252d_volatility(price_data::Dict{String, DataFrame}, date::Date;
+                                   window_days::Int = 252, min_obs::Int = 180)::Dict{String, Float64}
+    volatilities = Dict{String, Float64}()
+    cutoff = date - Day(1) # usar até dia anterior (signal lag)
+    for (ticker, df) in price_data
+        if nrow(df) < 2
+            continue
+        end
+        # Garantir ordenação
+        sort!(df, :date)
+        last_idx = searchsortedlast(df.date, cutoff)
+        if last_idx < 2
+            continue
+        end
+        start_idx = max(2, last_idx - window_days + 1)
+        n_obs = last_idx - start_idx + 1
+        if n_obs < min_obs
+            continue
+        end
+        # Calcular retornos diários em % nesta janela
+        rets = Vector{Float64}(undef, n_obs)
+        @inbounds for i in 1:n_obs
+            idx = start_idx - 1 + i
+            rets[i] = (df.price[idx] / df.price[idx - 1] - 1) * 100
+        end
+        daily_vol = std(rets)
+        volatilities[ticker] = daily_vol * sqrt(252)
+    end
     return volatilities
 end
 
@@ -882,12 +1214,21 @@ function get_universe_for_period(start_date::Date, end_date::Date;
         println("   📊 Observações no período: $(nrow(period_data))")
     end
     
-    # Coletar todos os tickers únicos
+    # Coletar e limpar todos os tickers únicos
     all_tickers = Set{String}()
     
     for row in eachrow(period_data)
         for ticker in row.Tickers
-            push!(all_tickers, ticker)
+            # Limpeza: remover anotações entre parênteses e espaços extras
+            t = strip(String(ticker))
+            # Remover qualquer sufixo " ( ... )" ou comentários após espaço
+            t = replace(t, r"\s*\(.*\)$" => "")
+            t = strip(t)
+            # Ignorar entradas vazias
+            if isempty(t)
+                continue
+            end
+            push!(all_tickers, t)
         end
     end
     
@@ -980,13 +1321,9 @@ function create_volatility_quintile_portfolios_pti(
         constituents_df = load_historical_sp500_constituents()
     end
     
-    # Verificar dados diários se necessário
-    daily_returns_df = nothing
-    if method == :daily252
-        if price_data === nothing
-            error("Método :daily252 requer price_data para calcular retornos diários")
-        end
-        daily_returns_df = calculate_daily_returns(price_data, verbose=false)
+    # Verificar dados diários se necessário (sem construir matriz gigante)
+    if method == :daily252 && price_data === nothing
+        error("Método :daily252 requer price_data para calcular retornos diários")
     end
     
     dates = returns_df.date
@@ -1011,13 +1348,24 @@ function create_volatility_quintile_portfolios_pti(
         
         # 1. UNIVERSO POINT-IN-TIME: filtrar tickers elegíveis na data de formação
         # USAR NOVA FUNÇÃO que valida disponibilidade de dados
-        eligible_tickers = get_valid_tickers_for_month(
-            formation_date, 
-            price_data,  # Usar price_data para validação
-            constituents_df,
-            min_lookback_months=lookback,
-            verbose=false
-        )
+        eligible_tickers = if method == :monthly12
+            # Usar versão baseada em retornos mensais (memória menor)
+            get_valid_tickers_for_month(
+                formation_date,
+                returns_df,
+                constituents_df,
+                min_lookback_months=lookback,
+                verbose=false
+            )
+        else
+            get_valid_tickers_for_month(
+                formation_date,
+                price_data === nothing ? Dict{String,DataFrame}() : price_data,
+                constituents_df,
+                min_lookback_months=div(lookback, 21), # aprox. meses equivalentes
+                verbose=false
+            )
+        end
         
         if length(eligible_tickers) < min_per_quintile * 5
             if verbose && skipped_months < 3
@@ -1046,8 +1394,9 @@ function create_volatility_quintile_portfolios_pti(
             end
         elseif method == :daily252
             # Volatilidade baseada em retornos diários (252 dias até formation_date)
-            volatilities = calculate_252d_volatility(daily_returns_df, formation_date, 
-                                                   window_days=lookback, min_obs=Int(ceil(lookback * min_coverage)))
+            # Calcular diretamente a partir de price_data (evita matriz de todos os retornos)
+            volatilities = calculate_252d_volatility(price_data, formation_date,
+                window_days=lookback, min_obs=Int(ceil(lookback * min_coverage)))
             # Filtrar apenas tickers elegíveis
             volatilities = Dict(k => v for (k, v) in volatilities if k in eligible_tickers)
         end
@@ -1293,6 +1642,42 @@ function get_valid_tickers_for_month(
     end
     
     return sort(valid_tickers)
+end
+
+"""
+Versão baseada em retornos mensais para determinar elegibilidade sem `price_data`.
+Ticker é elegível se tiver ao menos `min_lookback_months` retornos não-missing
+no período [t-min_lookback, t-1]. Opcionalmente filtra por universo S&P 500.
+"""
+function get_valid_tickers_for_month(
+    target_date::Date,
+    returns_df::DataFrame,
+    constituents_df::Union{DataFrame, Nothing} = nothing;
+    min_lookback_months::Int = 6,
+    verbose::Bool = false
+)::Vector{String}
+    # Encontrar índice da data alvo
+    idx = findfirst(returns_df.date .== target_date)
+    if idx === nothing || idx <= min_lookback_months
+        return String[]
+    end
+    start_idx = idx - min_lookback_months
+    end_idx = idx - 1
+    tickers = String.(names(returns_df)[2:end])
+    eligible = String[]
+    for t in tickers
+        window = returns_df[start_idx:end_idx, t]
+        if count(!ismissing, window) >= min_lookback_months
+            push!(eligible, t)
+        end
+    end
+    if constituents_df !== nothing
+        eligible = get_eligible_tickers_for_date(constituents_df, target_date, eligible)
+    end
+    if verbose
+        println("   ✅ Elegíveis (retornos): $(length(eligible))")
+    end
+    return sort(eligible)
 end
 
 """

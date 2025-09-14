@@ -352,11 +352,15 @@ function analyze_portfolio_alphas_aligned(
     ff5 = run_ff5_regression_aligned(portfolios_df, factors_df, portfolio_col,
         portfolio_name=portfolio_name, robust=false)
 
-    # Selecionar melhor modelo por R²
-    results = [capm]
-    if ff3 !== nothing; push!(results, ff3); end
-    if ff5 !== nothing; push!(results, ff5); end
-    best = results[argmax(getfield.(results, :r_squared))]
+    # Selecionar melhor modelo por R², ignorando resultados inexistentes
+    available = RegressionResult[]
+    if capm !== nothing; push!(available, capm); end
+    if ff3 !== nothing; push!(available, ff3); end
+    if ff5 !== nothing; push!(available, ff5); end
+    if isempty(available)
+        error("Nenhum resultado de regressão disponível após alinhamento e limpeza")
+    end
+    best = available[argmax(getfield.(available, :r_squared))]
     best_model = best.model
 
     conclusion = if best.alpha_pvalue > 0.05
@@ -375,7 +379,7 @@ function analyze_portfolio_alphas_aligned(
         raw_return,
         raw_volatility,
         raw_sharpe_annual,
-        capm,
+        capm === nothing ? available[1] : capm,
         ff3,
         ff5,
         best_model,
@@ -809,14 +813,14 @@ function run_regression(y::Vector{Float64}, factors_df::DataFrame, factor_cols::
         X = [X factors_df[!, s] ./ 100]
     end
     k = size(X,2)
-    β = (X'X) \ (X'y_dec)
+    β = (X' * X) \ (X' * y_dec)
     fitted = X * β
     resid = y_dec - fitted
     rss = sum(resid.^2)
     tss = sum((y_dec .- mean(y_dec)).^2)
     dof = n - k
     σ² = rss / dof
-    vcov = σ² * inv(X'X)
+    vcov = σ² * inv(X' * X)
     se = sqrt.(diag(vcov))
     tstats = β ./ se
     pvals = 2 .* (1 .- cdf.(TDist(dof), abs.(tstats)))
@@ -867,7 +871,7 @@ function run_robust_regression(y::Vector{Float64}, factors_df::DataFrame, factor
     for s in cols_syms
         X = [X factors_df[!, s] ./ 100]
     end
-    β = (X'X) \ (X'y_dec)
+    β = (X' * X) \ (X' * y_dec)
     se_nw = calculate_newey_west_se(y_dec, Matrix{Float64}(X), lags=lags)
     dof = n - size(X,2)
     t_alpha = β[1] / se_nw[1]

@@ -1,0 +1,368 @@
+# Configuração Centralizada de Resolução de Tickers
+# Sistema unificado para mapeamentos, normalizações e ações corporativas
+
+version: "3.0"
+updated: "2025-09-12" 
+description: "Configuração centralizada para resolução de tickers - substitui mapeamentos hardcoded"
+
+# Política de forced sale
+policy:
+  forced_sale_mode: "strict"   # "default" (mergers continuam) ou "strict" (forced sale para não-rebranding)
+  note: "Em modo strict: aquisições, falências e mergers geram forced sale; apenas rebranding simples continua a série."
+
+# Regras de normalização automática de símbolos
+normalization_rules:
+  # Conversão de formato para classes de ações
+  dot_to_hyphen:
+    enabled: true
+    pattern: "\\."
+    replacement: "-"
+    description: "Stooq usa hífen para classes: BRK.B → BRK-B"
+    
+  # Sufixos removidos automaticamente
+  remove_suffixes:
+    - ".US"
+    - ".NYSE" 
+    - ".NASDAQ"
+    
+  # Correções bidirecionais específicas
+  symbol_corrections:
+    "BRK.B": "BRK-B"
+    "BF.B": "BF-B"
+    # Mapeamento reverso também
+    "BRK-B": "BRK-B"  # Confirmar formato Stooq
+    "BF-B": "BF-B"    # Confirmar formato Stooq
+
+# Renomeações corporativas simples (apenas mudança de ticker, série contínua)
+corporate_renames:
+  # Confirmadas 2020-2024 - Apenas ticker changes, não aquisições
+  "ANTM": "ELV"      # Anthem → Elevance Health (2022) - rebranding
+  "CTL": "LUMN"      # CenturyLink → Lumen Technologies (2020) - rebranding
+  "FISV": "FI"       # Fiserv mudança de símbolo
+  "FB": "META"       # Facebook → Meta Platforms (2021) - rebranding
+  "META": "META"     # Meta mantém o mesmo ticker (já é o atual)
+  "NLOK": "GEN"      # NortonLifeLock → Gen Digital (2022) - rebranding
+  "VIAC": "PARAA"    # ViacomCBS → Paramount Global (classe A em Stooq) - rebranding
+  "COG": "CTRA"      # Cabot Oil & Gas → Coterra (2021) - rebranding
+  "MYL": "VTRS"      # Mylan → Viatris - merger equals, nova entidade
+  "DWDP": "DD"       # DowDuPont → DuPont (2019) - spin-off
+
+  # Mapeamentos de normalização
+  "BLL": "BALL"      # Ball Corporation - normalização
+  "RE": "RGA"        # Reinsurance Group - normalização
+  "RVTYP": "RVTY"    # Revvity correção de símbolo
+  "FBHS": "FBIN"     # Fortune Brands - normalização
+  "HCP": "PEAK"      # Healthcare Properties → Healthpeak - rebranding
+  "ADS": "BFH"       # Alliance Data → Bread Financial - rebranding
+  "PKI": "RVTY"      # PerkinElmer → Revvity (16-mai-2023) - spin-off + rebranding
+  "FLT": "CPAY"      # FleetCor → Corpay (25-mar-2024) - rebranding
+  "TMK": "GL"        # Torchmark → Globe Life (09-ago-2019) - rebranding
+  "WLTW": "WTW"      # Willis Towers Watson - normalização
+  "ABC": "COR"       # AmerisourceBergen → Cencora - rebranding
+  "GPS": "GAP"       # Gap Inc. - normalização
+
+  # Renomeações adicionais 2010-2024 - apenas ticker changes
+  "GR": "TGNA"        # Gannett Co. → Tegna Inc. (jun-2015) - spin-off
+  "NYX": "ICE"        # NYSE Euronext → Intercontinental Exchange (nov-2013) - merger equals
+  "RX": "IQV"         # IMS Health → IQVIA (IQV) (out-2016) - merger equals (ticker IQV)
+  "IGT": "IGT"        # International Game Tech - ativo desde fusão GTECH 2015
+
+# Fusões complexas (múltiplos tickers → sucessor)
+mergers:
+  raytheon_utx:
+    tickers: ["UTX", "RTN"]
+    successor: "RTX"
+    date: "2020-04-03"
+    description: "United Technologies + Raytheon → Raytheon Technologies"
+
+  cbs_viab:
+    tickers: ["CBS", "VIAB"]
+    successor: "VIAC"
+    date: "2019-12-04"
+    description: "CBS + Viacom → ViacomCBS (VIAC)"
+
+# Ações corporativas especiais
+corporate_actions:
+  # Aquisições
+  acquisitions:
+    "CBS":
+      acquirer: "VIAC"
+      date: "2019-12-04"
+      note: "CBS + Viacom → ViacomCBS (VIAC)"
+      type: "merger_equals"
+      tiingo_coverage: true
+    "CERN":
+      acquirer: "ORCL"
+      date: "2022-06-08"
+      note: "Cerner adquirida pela Oracle"
+      
+    "ABMD":
+      acquirer: "JNJ" 
+      date: "2022-12-21"
+      note: "Abiomed adquirida pela Johnson & Johnson"
+      
+    "MXIM":
+      acquirer: "ADI"
+      date: "2021-08-23"
+      note: "Maxim Integrated adquirida pela Analog Devices"
+      
+    "NBL":
+      acquirer: "CVX"
+      date: "2020-10-05" 
+      note: "Noble Energy adquirida pela Chevron"
+      
+    "NLSN":
+      acquirer: "Private"
+      date: "2022-10-01"
+      note: "Nielsen adquirida por private equity"
+      
+    "PBCT":
+      acquirer: "MTB"
+      date: "2022-04-01"
+      note: "People's United Bank adquirida pelo M&T Bank"
+    
+    "ESV":
+      acquirer: "VAL"
+      date: "2019-07-31"
+      note: "Ensco + Rowan → Valaris (merger of equals)"
+      type: "merger_equals"
+
+    "HFC":
+      acquirer: "DINO"
+      date: "2022-03-14"
+      note: "HollyFrontier reorganização → HF Sinclair (DINO)"
+      type: "merger_equals"
+      
+    "SNDK":
+      acquirer: "WDC"
+      date: "2016-05-12"
+      note: "SanDisk adquirida pela Western Digital"
+      tiingo_coverage: true
+
+    "MDP":
+      acquirer: "IAC"
+      date: "2021-12-01"
+      note: "Meredith adquirida pela IAC/Dotdash Meredith"
+      tiingo_coverage: true
+
+    "BDK":
+      acquirer: "SWK"
+      date: "2010-03-12"
+      note: "Black & Decker adquirida pela Stanley Works (merger of equals)"
+      type: "merger_equals"
+
+    "CBE":
+      acquirer: "ETN"
+      date: "2012-05-01"
+      note: "Cooper Industries adquirida pela Eaton"
+      type: "acquisition"
+
+    "MEE":
+      acquirer: "AEP"
+      date: "2011-01-01"
+      note: "Massey Energy adquirida após explosão, ativos para American Electric Power"
+      type: "acquisition"
+
+    "BNI":
+      acquirer: "BRK-B"
+      date: "2010-02-12"
+      note: "Burlington Northern adquirida pela Berkshire Hathaway"
+      type: "acquisition"
+
+
+    "CEPH":
+      acquirer: "SNY"
+      date: "2011-10-01"
+      note: "Cephalon adquirida pela Sanofi"
+      type: "acquisition"
+      tiingo_coverage: false  # Pré-2015, sem cobertura Tiingo
+
+    "GENZ":
+      acquirer: "SNY"
+      date: "2011-04-01"
+      note: "Genzyme adquirida pela Sanofi"
+      type: "acquisition"
+      tiingo_coverage: false  # Pré-2015, sem cobertura Tiingo
+
+    "MOLX":
+      acquirer: "Private"
+      date: "2013-09-01"
+      note: "Molex adquirida pela Koch Industries"
+      type: "acquisition"
+      tiingo_coverage: false  # Pré-2015, sem cobertura Tiingo
+
+    "NOVL":
+      acquirer: "Private"
+      date: "2011-05-01"
+      note: "Novell adquirida pela Attachmate"
+      type: "acquisition"
+      tiingo_coverage: false  # Pré-2015, sem cobertura Tiingo
+  
+  # Falências e liquidações  
+  bankruptcies:
+    "FRC":
+      status: "failed"
+      date: "2023-05-01"
+      successor: null
+      note: "First Republic Bank faliu, ativos para JPMorgan"
+      otc_ticker: "FRCB"  # Pós-falência negociou como FRCB no OTC
+      tiingo_coverage: true
+      
+    "EKDKQ":
+      status: "dissolved"
+      date: "2018-01-01"
+      successor: null
+      note: "Eastman Kodak dissolvida, operações descontinuadas"
+      tiingo_coverage: false  # Falência pré-2015
+
+    "JCP":
+      status: "chapter11_otc"
+      date: "2020-05-15"
+      successor: "JCPNQ"
+      note: "J.C. Penney falência maio-2020, OTC como JCPNQ"
+      otc_ticker: "JCPNQ"  # Sufixo -Q para OTC
+
+    "DF":
+      status: "chapter11_otc"
+      date: "2019-11-12"
+      successor: "DFODQ"
+      note: "Dean Foods falência nov-2019, OTC como DFODQ"
+      otc_ticker: "DFODQ"  # Ticker OTC específico
+      tiingo_coverage: true
+
+
+    "TLAB":
+      status: "dissolved"
+      date: "2013-12-12"
+      successor: null
+      note: "Tellabs assets distribuídos, empresa dissolvida"
+      tiingo_coverage: false  # Dissolução pré-2015
+
+    "BIG":
+      status: "chapter11_otc"
+      date: "2024-09-12"
+      successor: "BIGGQ"
+      note: "Big Lots em Chapter 11, negociado OTC como BIGGQ"
+      otc_ticker: "BIGGQ"  # Sufixo -Q para OTC
+      tiingo_coverage: true
+
+    "WIN":
+      status: "private"
+      date: "2020-09-21"
+      successor: null
+      note: "Saiu de Ch.11 como Windstream Holdings II, LLC (privada)"
+      otc_ticker: "WINMQ"  # Ticker OTC durante Chapter 11
+
+    "ENDP":
+      status: "delisted"
+      date: "2022-09-14"
+      successor: "ENDPQ"
+      note: "Delisted 14-set-2022, OTC como ENDPQ, ativos para Endo Inc. (privada)"
+      otc_ticker: "ENDPQ"  # Ticker OTC durante Chapter 11
+
+# Preferências de classe de ações
+share_class_preferences:
+  "GOOG": "GOOGL"    # Prefere classe A (com voto)
+  "GOOGL": "GOOGL"   # Mantém se já é A
+  "PARA": "PARAA"    # Em Stooq, disponível como classe A
+
+# Configuração de qualidade de dados
+data_quality_rules:
+  # Tickers com problemas temporários conhecidos
+  temporary_issues:
+    "DIS":
+      note: "Disney ocasionalmente tem problemas no Stooq; se faltar, usar Tiingo direto"
+      
+    "FLT":
+      status: "monitoring"
+      note: "FleetCor pode ter problemas temporários de dados"
+
+    "IGT":
+      prefer_tiingo: true
+      alternatives: ["IGT"]
+      note: "IGT pré-2015 via Tiingo (gaps no Stooq)"
+
+    "JCP":
+      alternatives: ["JCPNQ", "JCP", "JCPB"]
+      note: "J.C. Penney: tentar OTC JCPNQ; fallback para JCP/JCPB se necessário"
+
+    "CBS":
+      prefer_tiingo: true
+      alternatives: ["CBS"]
+      note: "CBS: preferir Tiingo (pré-2019), evitar Search por fundos"
+
+    "ESV":
+      prefer_tiingo: true
+      alternatives: ["ESV"]
+      note: "Ensco (ESV) pré-2019 via Tiingo"
+
+    "HFC":
+      prefer_tiingo: true
+      alternatives: ["HFC"]
+      note: "HFC pré-2022 via Tiingo"
+
+    "BDK":
+      prefer_tiingo: true
+      alternatives: ["BDK"]
+      note: "Black & Decker pré-2010-03-12 via Tiingo"
+
+    "MDP":
+      prefer_tiingo: true
+      alternatives: ["MDP"]
+      note: "Meredith (MDP) pré-2021-12-01 via Tiingo"
+      
+
+# Configuração de fontes de dados
+data_sources:
+  primary:
+    name: "stooq"
+    priority: 1
+    timeout_seconds: 30
+    retry_attempts: 3
+    base_url: "https://stooq.com/"
+    note: "Dados históricos via arquivo bulk manual (d_us_txt.zip)"
+    
+  fallback:
+    - name: "tiingo"
+      priority: 2
+      timeout_seconds: 25
+      retry_attempts: 0
+      note: "API Tiingo como fallback para tickers não encontrados no Stooq"
+
+# Estratégias de resolução (ordem de tentativa)
+resolution_strategies:
+  - name: "direct_lookup"
+    description: "Usar ticker original sem modificação"
+    
+  - name: "apply_renames"
+    description: "Verificar renomeações corporativas"
+    
+  - name: "normalize_symbol"
+    description: "Aplicar regras de normalização"
+    
+  - name: "check_preferences"
+    description: "Usar preferências de classe de ações"
+    
+  - name: "corporate_actions"
+    description: "Verificar aquisições e fusões"
+    
+  - name: "alternative_formats"
+    description: "Tentar formatos alternativos (hífen/ponto)"
+
+  - name: "tiingo_search"
+    description: "Usar Tiingo Search API para resolução dinâmica"
+    
+
+# Metadados de auditoria
+metadata:
+  migrated_from:
+    - "src/ticker_resolver.jl TICKER_MAPPINGS constant"
+    - "data/ticker_mappings.json"
+    - "hardcoded normalization rules"
+  total_mappings: 68
+  confidence_level: "high"
+  last_validation: "2025-09-13"
+  notes: 
+    - "Consolidação de todos mapeamentos hardcoded"
+    - "Estrutura extensível para novos tipos de ação corporativa"
+    - "Configuração versionada e auditável"

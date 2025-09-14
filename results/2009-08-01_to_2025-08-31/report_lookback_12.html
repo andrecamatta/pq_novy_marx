@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Novy-Marx Analysis - Lookback 12 months</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { color: #2c3e50; }
+        h2 { color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
+        table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: right; }
+        th { background-color: #3498db; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        .metric { font-size: 24px; font-weight: bold; color: #2980b9; }
+        .positive { color: #27ae60; }
+        .negative { color: #e74c3c; }
+    </style>
+</head>
+<body>
+    <h1>Novy-Marx Low Volatility Analysis</h1>
+    <h2>Configuration</h2>
+    <p>Lookback Period: <span class="metric">12 months</span></p>
+    <p>Analysis Period: 2010-09-01 to 2025-08-01</p>
+    <p>Total Months: <span class="metric">180</span></p>
+    
+    <h2>Portfolio Performance (Annualized)</h2>
+    <table>
+        <tr>
+            <th>Portfolio</th>
+            <th>Return (%)</th>
+            <th>Volatility (%)</th>
+            <th>Sharpe Ratio</th>
+            <th>Max Drawdown (%)</th>
+        </tr>
+    <tr>
+        <td><strong>P5</strong></td>
+        <td class="positive">15.03</td>
+        <td>23.36</td>
+        <td>0.644</td>
+        <td>-41.21</td>
+    </tr>
+    <tr>
+        <td><strong>LowMinusHigh</strong></td>
+        <td class="negative">-2.98</td>
+        <td>17.57</td>
+        <td>-0.169</td>
+        <td>-54.04</td>
+    </tr>
+    <tr>
+        <td><strong>P2</strong></td>
+        <td class="positive">13.65</td>
+        <td>13.77</td>
+        <td>0.991</td>
+        <td>-21.16</td>
+    </tr>
+    <tr>
+        <td><strong>P1</strong></td>
+        <td class="positive">12.05</td>
+        <td>11.83</td>
+        <td>1.019</td>
+        <td>-19.43</td>
+    </tr>
+    <tr>
+        <td><strong>P4</strong></td>
+        <td class="positive">14.23</td>
+        <td>18.26</td>
+        <td>0.779</td>
+        <td>-31.47</td>
+    </tr>
+    <tr>
+        <td><strong>P3</strong></td>
+        <td class="positive">13.55</td>
+        <td>15.53</td>
+        <td>0.873</td>
+        <td>-25.86</td>
+    </tr>
+    </table>
+    
+    <h2>Low Volatility Anomaly</h2>
+<p>P1 - P5 Annual Return: <span class="metric">-2.98%</span></p>
+<p>P1 - P5 Sharpe Ratio: <span class="metric">-0.169</span></p>
+<p>Status: <span class='negative'>ANOMALY REVERSED</span></p>
+</body>
+</html>
