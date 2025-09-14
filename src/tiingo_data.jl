@@ -8,7 +8,8 @@ using HTTP, JSON, DataFrames, Dates, Statistics
 using FileIO  # for cache with .jld2
 
 export get_historical_prices, test_tiingo_connection, get_tiingo_status,
-       clear_tiingo_cache, check_rate_limit_status, search_ticker
+       clear_tiingo_cache, check_rate_limit_status, search_ticker,
+       download_tiingo_eod
 
 # =================================================================
 # RATE LIMITING
@@ -19,6 +20,66 @@ mutable struct DailyRateLimiter
     last_reset::Date  
     daily_limit::Int
     enabled::Bool
+end
+
+"""
+    download_tiingo_eod(ticker, start_date, end_date; use_cache=true, cache_dir, verbose=true)
+
+Compat: baixa dados via Tiingo e retorna DataFrame padronizado com colunas 'Date', 'Open', 'High', 'Low', 'Close', 'Volume'.
+"""
+function download_tiingo_eod(
+    ticker::String,
+    start_date::Date,
+    end_date::Date;
+    use_cache::Bool = true,
+    cache_dir::String = "data/cache/tiingo",
+    verbose::Bool = true
+)::DataFrame
+    raw = get_historical_prices(
+        ticker;
+        start_date=start_date,
+        end_date=end_date,
+        use_cache=use_cache,
+        cache_dir=cache_dir,
+        verbose=verbose
+    )
+
+    if isempty(raw)
+        return raw  # vazio compatível
+    end
+
+    # Normalizar nomes de colunas
+    df = copy(raw)
+    if "date" in names(df)
+        rename!(df, "date" => "Date")
+    end
+    if "open" in names(df)
+        rename!(df, "open" => "Open")
+    end
+    if "high" in names(df)
+        rename!(df, "high" => "High")
+    end
+    if "low" in names(df)
+        rename!(df, "low" => "Low")
+    end
+    if "close" in names(df)
+        rename!(df, "close" => "Close")
+    end
+    if "volume" in names(df)
+        rename!(df, "volume" => "Volume")
+    end
+
+    # Garantir tipos corretos
+    if eltype(df[!, "Date"]) != Date
+        try
+            df[!, "Date"] = Date.(df[!, "Date"])
+        catch
+            return raw
+        end
+    end
+
+    sort!(df, :Date)
+    return df
 end
 
 # Global rate limiter instance

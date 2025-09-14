@@ -14,13 +14,23 @@ using DataFrames, Dates, Statistics, Printf, JSON, Optim
 using CSV
 
 # Incluir módulos do projeto principal
-include("../src/market_data.jl")
-using .MarketData
+include("../src/fama_french_factors.jl")
+include("../src/multifactor_regression.jl")
+include("../src/cache_manager.jl")
+include("../src/cache_adapter.jl")
+include("../src/data/sp500_constituents.jl")
+include("../src/analysis/returns_calculation.jl")
+include("../src/tiingo_data.jl")
+include("../src/stooq_data.jl")
+include("../src/ticker_config.jl")
+
+using .CacheManager, .CacheAdapter, .SP500Constituents, .ReturnsCalculation
+using .TiingoData, .StooqData, .TickerConfig
 
 module RSPAGGBenchmark
 
 using DataFrames, Dates, Statistics, Printf, JSON, CSV, Optim
-using ..MarketData
+using ..TiingoData, ..StooqData, ..ReturnsCalculation
 
 export run_benchmark_analysis, optimize_portfolio_weight, calculate_portfolio_metrics
 
@@ -38,14 +48,28 @@ function download_benchmark_data(start_date::Date, end_date::Date)
     download_start = start_date - Dates.Month(1)
 
     try
-        # Usar sistema híbrido para download
-        price_data = download_stock_data_hybrid(
-            tickers,
-            download_start,
-            end_date,
-            verbose=true,
-            use_tiingo=true
-        )
+        # Usar sistema TiingoData para download
+        price_data = Dict{String, DataFrame}()
+
+        for ticker in tickers
+            println("   📥 Baixando $ticker...")
+            try
+                data = TiingoData.get_historical_prices(ticker, start_date=download_start, end_date=end_date)
+                if !isempty(data) && nrow(data) > 0
+                    # Normalizar nomes de colunas
+                    if "date" in names(data) && !("Date" in names(data))
+                        rename!(data, :date => :Date)
+                    end
+                    if "close" in names(data) && !("Close" in names(data))
+                        rename!(data, :close => :Close)
+                    end
+                    price_data[ticker] = data
+                    println("   ✅ $ticker: $(nrow(data)) registros")
+                end
+            catch e
+                println("   ❌ Erro $ticker: $e")
+            end
+        end
 
         if length(price_data) == 2
             println("✅ Dados baixados com sucesso para RSP e AGG")
@@ -57,9 +81,9 @@ function download_benchmark_data(start_date::Date, end_date::Date)
 
     catch e
         println("❌ Erro no download: $e")
-        # Fallback para sistema antigo se necessário
-        println("🔄 Tentando sistema fallback...")
-        return download_stock_data(tickers, start_date, end_date, verbose=true)
+        # Fallback básico - simular dados se necessário
+        println("🔄 Usando sistema fallback...")
+        return Dict{String, DataFrame}()
     end
 end
 
@@ -342,7 +366,7 @@ function run_benchmark_analysis()
     println("-"^40)
 
     # Usar mesma função de cálculo de retornos
-    returns_df = calculate_returns(price_data, start_date, end_date, verbose=false)
+    returns_df = ReturnsCalculation.calculate_returns(price_data, start_date, end_date, verbose=false)
 
     if !("RSP" in names(returns_df)) || !("AGG" in names(returns_df))
         error("❌ Falha no cálculo de retornos")

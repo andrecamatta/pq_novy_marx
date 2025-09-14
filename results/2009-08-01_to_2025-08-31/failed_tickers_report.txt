@@ -1,26 +1,22 @@
-RELATÓRIO DE TICKERS FALHADOS
-========================================
-Período: 2009-08-01 até 2025-08-31
-Gerado em: 2025-09-14T09:24:22.225
+RELATÓRIO DE TICKERS FALTANTES
+==================================================
+Data: 2025-09-14 19:06:47
+Total: 16 tickers
+==================================================
 
-ESTATÍSTICAS:
-Total de tickers no universo: 774
-Tickers com sucesso: 761
-Tickers que falharam: 13
-Taxa de sucesso: 98.32%
-
-TICKERS QUE FALHARAM:
--------------------------
-1. BDK
-2. BNI
-3. CEPH
-4. EKDKQ
-5. GENZ
-6. HFC
-7. IGT
-8. MDP
-9. MEE
-10. MOLX
-11. NOVL
-12. TLAB
-13. WYE
+BDK
+BNI
+BRCM
+CEPH
+DISCA
+EKDKQ
+GENZ
+HFC
+IGT
+MDP
+MEE
+MOLX
+NOVL
+TLAB
+WRK
+WYE

@@ -18,9 +18,12 @@ Thumbs.db
 .idea/
 *.sublime-*
 
-# Output files (optional - you may want to keep some results)
-# *.csv
-# results/
+# Data cache (local only - not for repository)
+data/cache/
+
+# Output files (temporary results)
+results/
+*.csv
 
 # System files
 .env

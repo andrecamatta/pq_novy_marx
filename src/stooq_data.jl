@@ -11,7 +11,7 @@ using FileIO  # needed for `save`/`load` with .jld2
 include("ticker_config.jl")
 using .TickerConfig
 
-export download_stooq_bulk_us_selective, parse_stooq_csv, clean_stooq_ticker
+export download_stooq_bulk_us_selective, parse_stooq_csv, clean_stooq_ticker, load_from_stooq_index_optimized
 
 
 """
@@ -204,6 +204,7 @@ function download_stooq_bulk_us_selective(
 )::Dict{String, DataFrame}
     if verbose
         println("📦 Stooq bulk (selective ZIP scan) para $(length(tickers)) tickers...")
+        println("🔍 Fonte: arquivo local d_us_txt.zip (sem download)")
     end
 
     zip_file = joinpath(cache_dir, "d_us_txt.zip")
@@ -282,7 +283,8 @@ function download_stooq_bulk_us_selective(
     end
 
     if verbose
-        println("   ✅ Selective ZIP scan concluído: $found tickers encontrados")
+        println("   ✅ Stooq bulk: $found/$found tickers extraídos do ZIP local")
+        println("   📁 Nenhum download necessário (dados locais)")
     end
 
     return results

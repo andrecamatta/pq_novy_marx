@@ -15,7 +15,7 @@ Calcula volatilidade de 252 dias para todos os tickers em uma data específica
 function calculate_252d_volatility(
     daily_returns_df::DataFrame,
     date::Date;
-    min_days::Int = 200,
+    min_days::Int = 100,  # Reduzir para 100 dias mínimos
     verbose::Bool = false
 )::Dict{String, Float64}
 

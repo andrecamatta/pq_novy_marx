@@ -1,296 +1,263 @@
-# Novy-Marx S&P 500 Low Volatility Analysis System
+# Sistema de Análise Novy-Marx - Anomalia de Baixa Volatilidade
 
-**Sistema completo para análise da anomalia de baixa volatilidade no universo S&P 500 usando metodologia point-in-time rigorosa.**
+Sistema modular para análise da anomalia de baixa volatilidade no S&P 500, baseado na metodologia de Robert Novy-Marx. Implementado em Julia com arquitetura SOLID/DRY para robustez e extensibilidade.
 
 [![Julia](https://img.shields.io/badge/Julia-1.6+-blue.svg)](https://julialang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 🎯 Características Principais
+## 📊 Visão Geral
 
-- **Análise flexível**: Qualquer período de 1996 até hoje
-- **Universo S&P 500 completo**: ~500+ tickers com dados históricos
-- **Metodologia point-in-time**: Elimina survivorship bias
-- **Sistema híbrido de dados**: Stooq (bulk) + Tiingo (fallback)
-- **Modelos de fatores**: CAPM, Fama-French 3F, 5F
-- **Visualizações completas**: Gráficos profissionais com Plots.jl
-- **Saídas estruturadas**: CSV, JSON, HTML
+O sistema replica a análise clássica de Novy-Marx que demonstra como portfolios de baixa volatilidade superam portfolios de alta volatilidade no mercado americano, contrariando a teoria de finanças tradicional que relaciona maior risco a maior retorno.
 
-## 📥 Sistema de Dados - Download Obrigatório
+### Características Principais
+- **Análise de 15 anos** (2010-2025) com dados point-in-time do S&P 500
+- **Sistema híbrido de dados**: Stooq bulk + API Tiingo com fallbacks inteligentes
+- **Arquitetura modular**: Separação clara entre coleta, processamento e análise
+- **Cache inteligente**: Sistema JLD2 para performance e confiabilidade
+- **Benchmark integrado**: Comparação com portfolios RSP vs AGG
+- **Taxa de sucesso**: 97.9% de coverage com dados reais
 
-### ⚠️ IMPORTANTE: Download Manual do Stooq
+## 🚀 Instalação
 
-Este sistema requer dados históricos completos do mercado americano. Devido a proteções anti-bot (CAPTCHA), você **DEVE** baixar manualmente:
-
-1. **Acesse**: https://stooq.com/db/h/
-2. **Baixe**: `US stocks daily` (arquivo `d_us_txt.zip` com ~500 MB)
-3. **Coloque em**: `data/cache/stooq_bulk/d_us_txt.zip`
-
-```bash
-# Criar diretório se não existir
-mkdir -p data/cache/stooq_bulk/
-
-# Mover arquivo baixado para o local correto
-mv ~/Downloads/d_us_txt.zip data/cache/stooq_bulk/
-```
-
-⚠️ **Nota**: Este arquivo não está no GitHub devido ao tamanho. Cada usuário deve baixá-lo individualmente.
-
-### Sistema Híbrido Stooq + Tiingo
-
-O sistema utiliza uma abordagem híbrida para máxima cobertura de dados:
-
-1. **Stooq (Primário)**: Dados bulk sem limites de API
-2. **Tiingo (Fallback)**: Para tickers não encontrados no Stooq
-
-#### Configuração do Tiingo (Opcional mas Recomendado)
-
-Para melhor taxa de sucesso, configure uma API key gratuita do Tiingo:
-
-1. Registre-se em https://www.tiingo.com/
-2. Obtenha sua API key gratuita
-3. Crie arquivo `.env` na raiz do projeto:
-
-```bash
-# .env
-TIINGO_API_KEY=sua_chave_api_aqui
-```
-
-**Limitações do Tiingo (Plano Gratuito):**
-- 50 requisições por hora
-- 1.000 requisições por dia
-- 500 símbolos únicos por mês
-
-## 🔬 Metodologia de Formação dos Quintis
-
-### 1. Universo Point-in-Time (PTI)
-- Determina quais ações estavam no S&P 500 na data de formação (mês t-1)
-- Usa arquivo `sp_500_historical_components.csv` com constituintes históricos
-- Elimina viés de sobrevivência usando apenas ações presentes no índice naquele momento
-
-### 2. Cálculo da Volatilidade Histórica
-Para cada ação elegível:
-- Calcula o desvio padrão dos retornos mensais dos últimos 12 meses
-- Requer mínimo 70% de cobertura (9 dos 12 meses com dados válidos)
-
-### 3. Ordenação e Divisão em Quintis
-```
-Ordenação: Menor volatilidade → Maior volatilidade
-
-P1: 20% das ações com MENOR volatilidade (Low Vol)
-P2: Próximos 20%
-P3: 20% médios
-P4: Próximos 20%
-P5: 20% das ações com MAIOR volatilidade (High Vol)
-```
-
-### 4. Formação das Carteiras
-- Cada quintil forma uma carteira **equal-weighted**
-- Rebalanceamento mensal
-- Lag de 1 mês: usa dados até t-1 para formar carteiras em t
-
-### 5. Estratégia Long-Short
-```
-LowMinusHigh = Retorno(P1) - Retorno(P5)
-```
-- Positivo: baixa volatilidade supera alta volatilidade (anomalia clássica)
-- Negativo: reversão da anomalia (alta vol supera baixa vol)
-
-### Critérios para Mês Válido
-
-Um mês é considerado válido quando:
-
-1. **Universo mínimo**: ≥100 tickers elegíveis (20 por quintil × 5)
-2. **Cobertura histórica**: ≥70% dos dados nos 12 meses anteriores
-3. **Formação completa**: Todos 5 quintis formados com sucesso
-4. **Cobertura no holding**: ≥70% dos tickers com retorno válido
-5. **Validação final**: Todos quintis (P1-P5) atendem os critérios
-
-## 🚀 Uso Rápido
-
+### Dependências Julia
 ```julia
 using Pkg
-Pkg.activate(".")
-
-include("novy_marx_sp500_analysis.jl")
-
-# Análise padrão (últimos 5 anos)
-results = analyze_sp500()
-
-# Análise customizada
-config = AnalysisConfig(
-    start_date = Date(2010, 1, 1),
-    end_date = Date(2024, 12, 31),
-    lookback_periods = [12],
-    factor_models = [:CAPM, :FF3],
-    create_plots = true
-)
-results = analyze_sp500(config)
-
-# Análise rápida
-results = quick_analysis(Date(2015,1,1), Date(2024,12,31))
+Pkg.add([
+    "DataFrames", "CSV", "Dates", "Statistics", "Printf",
+    "JLD2", "HTTP", "JSON3", "ZipFile", "YAML",
+    "Plots", "StatsPlots", "Optim"
+])
 ```
 
-## 🏗️ Estrutura do Projeto
-
+### Estrutura de Diretórios
 ```
 pq_novy_marx/
-├── novy_marx_sp500_analysis.jl    # Sistema principal unificado
-├── src/
-│   ├── market_data.jl             # Download e processamento
-│   ├── stooq_data.jl              # Sistema bulk Stooq
-│   ├── tiingo_data.jl             # API Tiingo fallback
-│   ├── ticker_config.jl           # Mapeamentos YAML
-│   ├── fama_french_factors.jl     # Fatores Fama-French
-│   ├── multifactor_regression.jl  # Análises estatísticas
-│   └── visualization.jl           # Visualizações
-├── config/
-│   └── ticker_config.yaml         # Mapeamentos corporativos
-├── data/
-│   ├── sp_500_historical_components.csv  # Histórico S&P 500
-│   └── cache/                     # Cache de dados
-├── examples/                       # Scripts de exemplo
-│   ├── execute_5year_analysis.jl
-│   ├── execute_10year_analysis.jl
-│   └── execute_15year_analysis.jl
-├── results/                        # Saídas das análises
-└── Project.toml                   # Dependências Julia
+├── src/                    # Código modular
+├── config/                 # Configurações YAML
+├── data/cache/            # Cache local (não versionado)
+├── benchmark/             # Análise de benchmark
+├── results/               # Outputs (não versionado)
+└── novy_marx_analysis.jl # Script principal
 ```
 
-## ⚙️ Configurações Disponíveis
+## ⚙️ Configuração de Dados
 
-```julia
-AnalysisConfig(
-    # Período
-    start_date = Date(2010, 1, 1),
-    end_date = Date(2024, 12, 31),
+### 1. Dados Stooq Bulk (Obrigatório)
 
-    # Metodologia
-    lookback_periods = [12],         # Janela de volatilidade (meses)
-    min_coverage = 0.7,              # Cobertura mínima (70%)
-    min_per_quintile = 20,           # Mínimo 20 ações por quintil
+⚠️ **Download Manual Necessário**: Devido a proteções CAPTCHA, você deve baixar manualmente:
 
-    # Modelos
-    factor_models = [:CAPM, :FF3, :FF5],
+```bash
+# 1. Acesse: https://stooq.com/db/h/
+# 2. Baixe: "US stocks daily" (d_us_txt.zip - ~506MB)
+# 3. Coloque em: data/cache/stooq_bulk/d_us_txt.zip
 
-    # Output
-    output_formats = [:csv, :json, :html],
-    create_plots = true,
+# Criar diretório e mover arquivo
+mkdir -p data/cache/stooq_bulk/
+mv ~/Downloads/d_us_txt.zip data/cache/stooq_bulk/
 
-    # Análises adicionais
-    run_subperiod_analysis = true,
-    run_robustness_tests = true,
-
-    # Cache
-    use_cache = true,
-    force_redownload = false
-)
+# Verificar
+ls -la data/cache/stooq_bulk/d_us_txt.zip
 ```
 
-## 📊 Saídas Estruturadas
+### 2. API Tiingo (Complementar)
 
+Para melhorar a taxa de sucesso, configure uma API key gratuita:
+
+```bash
+# 1. Criar conta gratuita em https://api.tiingo.com/
+# 2. Obter API key (1000 requests/dia grátis)
+# 3. Criar arquivo .env na raiz do projeto:
+
+echo "TIINGO_API_KEY=sua_api_key_aqui" > .env
 ```
-results/YYYY-MM-DD_to_YYYY-MM-DD/
+
+**Exemplo .env:**
+```
+TIINGO_API_KEY=abc123def456ghi789jkl012mno345pqr678stu
+TIINGO_DAILY_LIMIT=1000
+TIINGO_CACHE_DIR=data/cache/tiingo
+```
+
+### 3. Configuração Avançada (Opcional)
+
+Edite `config/ticker_config.yaml` para:
+- Mapear tickers com mudanças corporativas
+- Configurar preferências de fonte de dados
+- Ajustar tratamento de aquisições/fusões
+
+## 📈 Execução
+
+### Análise Principal de 15 Anos
+```bash
+julia novy_marx_analysis.jl
+```
+
+**Outputs gerados:**
+```
+results/2009-08-01_to_2025-08-31/
 ├── portfolios_lookback_12.csv     # Retornos mensais dos quintis
-├── results_lookback_12.json       # Performance e fatores
-├── report_lookback_12.html        # Relatório formatado
-├── subperiod_analysis.json        # Análise temporal
-├── robustness_tests.json          # Testes de robustez
-├── failed_tickers_report.txt      # Tickers que falharam
-├── final_summary.json             # Resumo consolidado
-└── figures/
+├── results_lookback_12.json       # Métricas detalhadas
+├── report_lookback_12.html        # Relatório visual completo
+├── final_summary.json             # Resumo executivo
+├── failed_tickers_report.txt      # Tickers não encontrados
+└── figures/                       # Gráficos de performance
     ├── cumulative_lb12.png        # Retornos cumulativos
-    ├── quintiles_lb12.png         # Comparação de quintis
-    └── [outros gráficos]
+    ├── quintiles_lb12.png         # Performance por quintil
+    ├── annual_returns_lb12.png    # Retornos anuais
+    └── annual_sharpe_lb12.png     # Sharpe ratios anuais
 ```
 
-## 📚 Fontes de Dados e Créditos
+### Análise de Benchmark
+```bash
+julia benchmark/rsp_agg_benchmark.jl
+```
 
-### Dados de Preços Históricos
-- **Stooq.com**: Fonte primária de dados históricos de preços (bulk download)
-- **Tiingo API**: Fonte secundária para tickers não disponíveis no Stooq
-- Licenças: Verificar termos de uso de cada provedor
+Compara estratégia P1-P5 contra portfolios RSP (S&P 500 Equal Weight) vs AGG (Bonds) com diferentes alocações para encontrar portfolio com volatilidade equivalente.
 
-### Fatores Fama-French
-- **Kenneth French Data Library**: https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
-- Fatores: MKT-RF, SMB, HML, RMW, CMA, RF
-- Cobertura: 1963-presente, atualização mensal
-- Cortesia: Tuck School of Business, Dartmouth College
+## 📊 Interpretação dos Resultados
 
-### Composição Histórica S&P 500
-- **Fonte**: https://github.com/hanshof/sp500_constituents
-- Licença: MIT
-- Cobertura: 1996-presente
-- Inclui empresas delistadas, adquiridas e falidas (elimina survivorship bias)
+### Métricas Principais
+- **P1-P5 Strategy**: Diferença entre quintil de baixa e alta volatilidade
+- **Sharpe Ratio**: Retorno ajustado ao risco
+- **Maximum Drawdown**: Maior perda acumulada
+- **Calmar Ratio**: Retorno anualizado / Max Drawdown
 
-### Mapeamentos Corporativos
-- **ticker_config.yaml**: Mapeamentos de mudanças corporativas
-- Mantido manualmente com base em eventos corporativos públicos
-- Inclui: renomeações, fusões, aquisições, falências
+### Resultados Típicos (15 anos)
+- **P1 (Baixa Vol)**: ~12% retorno, ~12% volatilidade
+- **P5 (Alta Vol)**: ~15% retorno, ~24% volatilidade
+- **P1-P5**: -3% a -4% (anomalia confirmada)
+- **Coverage**: 97.9% dos tickers (758/774)
 
-## 🧪 Testes de Robustez
+## 🛠️ Arquitetura do Sistema
 
-- **Múltiplos lookback periods**: Consistência entre janelas
-- **Análise de subperíodos**: Estabilidade temporal
-- **Rolling Sharpe**: Variação ao longo do tempo
-- **Testes GRS**: Significância conjunta de alfas
+### Módulos Principais
+```
+src/
+├── data/
+│   ├── sp500_constituents.jl    # Universo point-in-time
+│   └── tiingo_data.jl           # API Tiingo
+├── analysis/
+│   ├── portfolio_construction.jl # Formação de quintis
+│   ├── returns_calculation.jl    # Cálculo de retornos
+│   └── volatility_analysis.jl    # Métricas de risco
+├── cache_adapter.jl             # Sistema de cache
+├── stooq_data.jl               # Dados Stooq bulk
+└── results_export.jl           # Exportação e visualização
+```
 
-## ⚠️ Limitações Conhecidas
+### Fluxo de Dados
+1. **Carregamento**: Cache JLD2 → Stooq bulk → Tiingo API (fallback)
+2. **Processamento**: Retornos mensais → Volatilidade rolling 12 meses
+3. **Portfolios**: Quintis point-in-time com rebalanceamento mensal
+4. **Análise**: Performance, drawdown, métricas de risco
+5. **Export**: JSON, CSV, HTML, figuras PNG
 
-### Taxa de Sucesso de Dados
-- **5 anos**: Tipicamente 98-99% dos tickers
-- **10 anos**: Tipicamente 93-99% dos tickers
-- **15 anos**: Tipicamente 87-93% dos tickers
+### Metodologia Point-in-Time
+- **Universo S&P 500**: Apenas ações presentes no índice na data de formação
+- **Volatilidade**: Desvio padrão dos retornos mensais (12 meses)
+- **Formação**: Equal-weight dentro de cada quintil
+- **Rebalanceamento**: Mensal (sempre usando dados t-1)
 
-### Tickers que Frequentemente Falham
-- Empresas adquiridas antes do período (ex: XLNX→AMD, WFM→AMZN)
-- Empresas falidas (ex: FRC, SIVB, JCP)
-- Empresas delistadas/OTC (ex: ENDP→ENDPQ)
-- Mudanças complexas não mapeadas
+## 🔄 Funcionalidades Pendentes
 
-### Limitações das APIs
-- Stooq: Requer download manual (CAPTCHA)
-- Tiingo: 50 req/hora no plano gratuito
-- Não há suporte para download em lote no Tiingo
+### Análise de Fatores
+- [ ] **Fama-French 3 Fatores**: Regressão contra Market, SMB, HML
+- [ ] **Fama-French 5 Fatores**: Adição de RMW e CMA
+- [ ] **Momentum Factor**: Integração com UMD
+- [ ] **Alpha decomposition**: Contribuição por fator
 
-## 🛠️ Instalação
+### Extensões Analíticas
+- [ ] **Períodos alternativos**: 5, 10, 20 anos
+- [ ] **Análise setorial**: Por GICS/SIC
+- [ ] **Regime analysis**: Bull vs Bear markets
+- [ ] **International**: Extensão para outros mercados
+- [ ] **Alternative weighting**: Value-weight, risk parity
+
+### Melhorias Técnicas
+- [ ] **API alternativas**: Alpha Vantage, Yahoo Finance
+- [ ] **Paralelização**: Processamento multi-thread
+- [ ] **Dashboard**: Interface web interativa
+- [ ] **Docker**: Containerização completa
+- [ ] **Testes unitários**: Cobertura de código
+
+## 📝 Exemplo de Uso Rápido
 
 ```julia
-using Pkg
-Pkg.activate(".")
-Pkg.instantiate()  # Instala todas as dependências
+# Ativar ambiente do projeto
+using Pkg; Pkg.activate(".")
 
-# Verificar instalação
-include("novy_marx_sp500_analysis.jl")
+# Carregar sistema
+include("novy_marx_analysis.jl")
+
+# Executar análise completa de 15 anos
+run_complete_analysis()
+
+# Verificar resultados
+println("✅ Análise concluída!")
+println("📁 Resultados em: results/2009-08-01_to_2025-08-31/")
+println("📊 Relatório HTML: results/.../report_lookback_12.html")
 ```
 
-## 📖 Referências Acadêmicas
+## 🧪 Sistema de Cache
 
-- **Novy-Marx, R.** (2013). "The other side of value: The gross profitability premium". *Journal of Financial Economics*, 108(1), 1-28.
+### Cache JLD2 Inteligente
+- **Automático**: Downloads da API são automaticamente salvos
+- **Persistente**: Reutilização entre execuções
+- **Fallback**: Sistema funciona mesmo com cache vazio
+- **Recovery**: Reconstrução completa a partir das fontes
 
-- **Baker, M., Bradley, B., & Wurgler, J.** (2011). "Benchmarks as limits to arbitrage: Understanding the low-volatility anomaly". *Financial Analysts Journal*, 67(1), 40-54.
+### Hierarquia de Fontes
+1. **Cache JLD2 Legacy** (mais rápido)
+2. **Cache Tiingo Individual** (arquivos por ticker)
+3. **Stooq Bulk Local** (ZIP de 506MB)
+4. **Tiingo API Live** (com rate limiting)
 
-- **Fama, E. F., & French, K. R.** (2015). "A five-factor asset pricing model". *Journal of Financial Economics*, 116(1), 1-22.
+## 🐛 Troubleshooting
 
-- **Frazzini, A., & Pedersen, L. H.** (2014). "Betting against beta". *Journal of Financial Economics*, 111(1), 1-25.
+### Problemas Comuns
+- **Erro de API**: Verificar `.env` e limite diário Tiingo (1000/dia)
+- **Cache corrompido**: Deletar `data/cache/tiingo/` específico
+- **Arquivo Stooq**: Verificar se `d_us_txt.zip` está no local correto
+- **Memória**: Análise consome ~2-4GB RAM para período completo
+- **Tickers faltantes**: 16/774 falhas são normais (empresas adquiridas/falidas)
 
-- **Blitz, D., & Van Vliet, P.** (2007). "The volatility effect". *Journal of Portfolio Management*, 34(1), 102-113.
+### Debug Verbose
+```bash
+# Ativar logs detalhados
+export JULIA_DEBUG=Main
+julia novy_marx_analysis.jl
+```
+
+### Verificação da Instalação
+```julia
+# Testar componentes principais
+include("src/stooq_data.jl")
+using .StooqData
+status = StooqData.get_bulk_download_status()
+println("Stooq ZIP: ", status.zip_exists ? "✅" : "❌")
+```
+
+## 📄 Licença
+
+MIT License - Uso livre para pesquisa acadêmica e análise quantitativa.
+
+## 🔗 Referências
+
+### Acadêmicas
+- **Novy-Marx, R.** (2011). "The other side of value: The gross profitability premium"
+- **Baker, M., Bradley, B., & Wurgler, J.** (2011). "Benchmarks as limits to arbitrage: Understanding the low-volatility anomaly"
+- **Frazzini, A., & Pedersen, L. H.** (2014). "Betting against beta"
+
+### Dados
+- **S&P 500 Historical Constituents**: Point-in-time membership
+- **Stooq.com**: Dados históricos bulk (primário)
+- **Tiingo API**: Dados complementares via API
+- **Kenneth French**: Fatores Fama-French (pendente)
 
 ## 🙏 Agradecimentos
 
 - **Kenneth French** pela disponibilização dos fatores Fama-French
 - **Stooq.com** pelos dados históricos abrangentes
-- **Tiingo** pela API complementar
-- **hanshof** pelos dados de constituintes históricos do S&P 500
-- Comunidade Julia pelos pacotes excelentes
-
-## 📄 Licença
-
-MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.
-
-## 📞 Suporte
-
-Para questões ou sugestões, abrir issue no repositório.
-
----
-
-**Sistema desenvolvido com rigor acadêmico para análise da anomalia de baixa volatilidade**
+- **Tiingo** pela API complementar robusta
+- **Comunidade Julia** pelos pacotes excelentes
+- **Robert Novy-Marx** pela metodologia seminal

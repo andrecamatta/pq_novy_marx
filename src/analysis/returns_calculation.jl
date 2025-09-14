@@ -4,6 +4,7 @@ Módulo para cálculo de retornos - extrai funções do market_data.jl
 module ReturnsCalculation
 
 using DataFrames, Dates, Statistics
+using Base.Threads
 
 export calculate_returns, calculate_daily_returns, calculate_monthly_returns
 
@@ -28,7 +29,7 @@ function calculate_returns(
     returns_df = DataFrame(Date = Date[])
 
     # Gerar datas mensais
-    current_date = Date(year(start_date), month(start_date), lastdayofmonth(start_date))
+    current_date = lastdayofmonth(start_date)
     dates = Date[]
 
     while current_date <= end_date
@@ -36,50 +37,74 @@ function calculate_returns(
         current_date = lastdayofmonth(current_date + Day(1))
     end
 
-    returns_df.Date = dates
+    returns_df = DataFrame(Date = dates)
 
-    # Calcular retornos para cada ticker
+    # Calcular retornos para cada ticker (versão otimizada)
+    tickers = collect(keys(price_data))
+    nt = length(tickers)
     tickers_processados = 0
     tickers_com_dados = 0
 
-    for (ticker, df) in price_data
+    # Guardar resultados intermediários para evitar escrita concorrente no DataFrame
+    results = Vector{Union{Nothing, Vector{Union{Float64, Missing}}}}(undef, nt)
+
+    @threads for idx in 1:nt
+        ticker = tickers[idx]
+        df = get(price_data, ticker, DataFrame())
         if isempty(df)
+            results[idx] = nothing
             continue
         end
 
-        tickers_processados += 1
+        # Garantir ordenação por data para pesquisa binária
+        if !(issorted(df[!, :Date]))
+            sort!(df, :Date)
+        end
 
-        # Calcular retornos mensais
-        monthly_returns = Float64[]
+        dvec = df[!, :Date]
+        pvec = df[!, :Close]
 
-        for i in 1:length(dates)
+        # Pré-alocar vetor de retornos
+        monthly_returns = Vector{Union{Float64, Missing}}(undef, length(dates))
+
+        @inbounds for i in 1:length(dates)
             month_end = dates[i]
             month_start = i == 1 ? start_date : dates[i-1] + Day(1)
 
-            # Buscar preços
-            start_data = filter(row -> row.Date <= month_start, df)
-            end_data = filter(row -> row.Date <= month_end, df)
+            # Índices usando busca binária (último <= alvo)
+            j_end = searchsortedlast(dvec, month_end)
+            j_start = searchsortedlast(dvec, month_start)
 
-            if !isempty(start_data) && !isempty(end_data)
-                start_price = last(start_data).Close
-                end_price = last(end_data).Close
+            if j_end == 0 || j_start == 0
+                monthly_returns[i] = missing
+                continue
+            end
 
-                if start_price > 0 && end_price > 0
-                    ret = (end_price - start_price) / start_price * 100
-                    push!(monthly_returns, ret)
-                else
-                    push!(monthly_returns, missing)
-                end
+            p_start = pvec[j_start]
+            p_end = pvec[j_end]
+
+            if ismissing(p_start) || ismissing(p_end) || p_start <= 0 || p_end <= 0
+                monthly_returns[i] = missing
             else
-                push!(monthly_returns, missing)
+                monthly_returns[i] = (p_end - p_start) / p_start * 100
             end
         end
 
-        # Adicionar ao DataFrame se tem dados válidos
         if any(!ismissing, monthly_returns)
-            returns_df[!, Symbol(ticker)] = monthly_returns
+            results[idx] = monthly_returns
+        else
+            results[idx] = nothing
+        end
+    end
+
+    # Escrever resultados no DataFrame (serial)
+    for i in 1:nt
+        monthly_returns = results[i]
+        if monthly_returns !== nothing
+            returns_df[!, Symbol(tickers[i])] = monthly_returns::Vector{Union{Float64, Missing}}
             tickers_com_dados += 1
         end
+        tickers_processados += 1
     end
 
     if verbose
@@ -119,6 +144,9 @@ function calculate_daily_returns(
     # Inicializar DataFrame
     returns_df = DataFrame(Date = dates)
 
+    # Mapa de data -> índice para acesso O(1)
+    date_to_idx = Dict{Date, Int}(d => i for (i, d) in enumerate(dates))
+
     # Calcular retornos para cada ticker
     tickers_processados = 0
 
@@ -130,16 +158,18 @@ function calculate_daily_returns(
         tickers_processados += 1
 
         # Ordenar por data
-        sort!(df, :Date)
+        if !(issorted(df[!, :Date]))
+            sort!(df, :Date)
+        end
 
         # Criar série de retornos alinhada com todas as datas
         returns = Vector{Union{Float64, Missing}}(missing, length(dates))
 
-        for i in 2:nrow(df)
+        @inbounds for i in 2:nrow(df)
             date = df.Date[i]
-            date_idx = findfirst(d -> d == date, dates)
+            date_idx = get(date_to_idx, date, 0)
 
-            if !isnothing(date_idx)
+            if date_idx != 0
                 prev_price = df.Close[i-1]
                 curr_price = df.Close[i]
 

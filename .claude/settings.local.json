@@ -37,7 +37,11 @@
       "Bash(done)",
       "Bash(cat:*)",
       "Bash(awk:*)",
-      "Bash(sort:*)"
+      "Bash(sort:*)",
+      "WebFetch(domain:api.tiingo.com)",
+      "Bash(echo:*)",
+      "Bash(git reset:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []
