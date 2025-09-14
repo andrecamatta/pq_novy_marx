@@ -34,4 +34,4 @@ results/
 
 # Julia package development
 /dev/
-/packages/
+/packages/benchmark/data/cache/
